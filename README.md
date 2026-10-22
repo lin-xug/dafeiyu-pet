@@ -2,7 +2,9 @@
 
 > 不是一个"有问必答"的客服机器人，而是一个有脾气、有记忆、知道什么时候该闭嘴的群友。
 
-`Python 3.10+` · `FastAPI` · `OneBot v11` · `纯文件存储（无数据库）` · `96 个单元测试`
+`Python 3.10+` · `FastAPI` · `OneBot v11` · `纯文件存储（无数据库）` · `117 个单元测试`
+
+仓库：<https://github.com/lin-xug/dafeiyu-pet>
 
 ---
 
@@ -198,7 +200,7 @@
 ### 1. 装依赖
 
 ```bash
-git clone <your-repo> dafeiyu && cd dafeiyu
+git clone https://github.com/lin-xug/dafeiyu-pet.git dafeiyu && cd dafeiyu
 python3 -m venv .venv
 ./.venv/bin/pip install -r requirements.txt
 ```
