@@ -1,0 +1,33 @@
+#!/bin/sh
+# 提交前挡住真实密钥。启用方式（每个克隆执行一次）：
+#   git config core.hooksPath .githooks
+#
+# 仓库是公开的，.env 一旦进版本库就是不可逆泄露。
+set -e
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+found=0
+for f in $staged; do
+    case "$f" in
+        .env|.env.*) echo "✗ $f 不能提交（含真实密钥）"; found=1; continue;;
+    esac
+    # 跳过二进制
+    case "$f" in
+        *.png|*.jpg|*.jpeg|*.gif|*.webp|*.mp3|*.silk|*.amr|*.ico) continue;;
+    esac
+    [ -f "$f" ] || continue
+    if grep -qE 'sk-[A-Za-z0-9]{24,}' "$f" 2>/dev/null; then
+        echo "✗ $f 里疑似有真实 API 密钥（sk-…）"
+        grep -nEo 'sk-[A-Za-z0-9]{24,}' "$f" | head -3
+        found=1
+    fi
+done
+
+if [ "$found" = "1" ]; then
+    echo ""
+    echo "已阻止提交。确认是误报就用 git commit --no-verify 绕过（不推荐）。"
+    exit 1
+fi
+exit 0
