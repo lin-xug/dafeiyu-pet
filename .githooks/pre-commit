@@ -11,7 +11,9 @@ staged=$(git diff --cached --name-only --diff-filter=ACM)
 found=0
 for f in $staged; do
     case "$f" in
-        .env|.env.*) echo "✗ $f 不能提交（含真实密钥）"; found=1; continue;;
+        # 模板文件本来就该进仓库（里面只能是占位符）
+        .env.example|.env.sample|.env.template|.env.dist) ;;
+        .env|.env.local|*.env|.env.*.local) echo "✗ $f 不能提交（含真实密钥）"; found=1; continue;;
     esac
     # 跳过二进制
     case "$f" in

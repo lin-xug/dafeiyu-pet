@@ -191,6 +191,8 @@ GITHUB_URL = os.getenv("GITHUB_URL", "").strip()
 # 求赞限频：私聊隔多少天才能提一次，群里隔多少天才能提一次
 GITHUB_BRAG_PRIVATE_DAYS = _int("GITHUB_BRAG_PRIVATE_DAYS", 3)
 GITHUB_BRAG_GROUP_DAYS = _int("GITHUB_BRAG_GROUP_DAYS", 7)
+# 主人下命令「推销一下自己」时，同一个群多久之内不重复发（秒），防被当广告机刷
+GITHUB_BRAG_CMD_COOLDOWN = _int("GITHUB_BRAG_CMD_COOLDOWN", 3600)
 
 # ---- 收图 ----
 # 收到图片时自动存进 杂图/（只对特殊关系的人生效）

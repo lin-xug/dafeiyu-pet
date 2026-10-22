@@ -356,6 +356,20 @@ async def handle(event: dict) -> None:
         log.info("群 %s 关闭模式，只记录不回复：%s", group_id, (text or "[图]")[:20])
         return
 
+    # 主人命令：推销一下自己（群里必须 @ 才认，别人喊不动它打广告）
+    brag_cmd = False
+    if is_at and text and persona.is_special(user_id) and brag.match(text):
+        if not config.GITHUB_URL:
+            await onebot.send_group(group_id, "没配 GitHub 链接，我推销不了")
+            return
+        if brag.cmd_take(group_id):
+            brag_cmd = True
+            log.info("群 %s 主人命令推销自己", group_id)
+        else:
+            # 别让主人觉得"喊了没反应"
+            await onebot.send_group(group_id, "刚推销过了，过会儿再说吧")
+            return
+
     # touch 会顺便处理"太久没说话"的冷落扣分
     aff = affinity.touch(user_id) if config.AFFINITY_ENABLED else affinity.Affinity(exp=150)
 
@@ -443,7 +457,7 @@ async def handle(event: dict) -> None:
         " 直呼" if directed else "",
     )
 
-    if directed:
+    if directed and not brag_cmd:
         # 被点名就走宽松额度：不看静音、不占日常配额，只防刷屏
         if _direct_left(st, conf) <= 0:
             log.info("群 %s 被点名次数到顶（每小时 %d 次），这轮不回", group_id, conf["direct_hourly"])
@@ -471,7 +485,8 @@ async def handle(event: dict) -> None:
             persona.relation_hint(user_id),
             affinity.tone_block(aff),
             facts.block(user_id),
-            brag.group_block(group_id),  # GitHub 那段由代码限频，冷却没到就不出现
+            "" if brag_cmd else brag.group_block(group_id),  # 冷却没到就不出现
+            brag.force_block("群里，当着大家的面") if brag_cmd else "",
         )
         if p
     )

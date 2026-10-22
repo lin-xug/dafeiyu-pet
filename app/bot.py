@@ -370,6 +370,17 @@ async def handle_event(event: dict) -> None:
         await onebot.send_private(user_id, bill_reply)
         return
 
+    # ---- 主人命令：推销一下自己 ----
+    brag_target = None
+    if text and persona.is_special(user_id):
+        tgt = brag.match(text, loose=True)
+        if tgt:
+            if not config.GITHUB_URL:
+                await onebot.send_private(user_id, "还没配 GITHUB_URL，我不知道该推销什么")
+                return
+            brag_target = tgt
+            log.info("主人命令推销自己 -> %s", tgt)
+
     # ---- 好友 / 入群申请：先于模型，命中就走这里 ----
     if text:
         req_reply = await requests.handle_command(text, user_id, await _can_manage(user_id))
@@ -415,8 +426,12 @@ async def handle_event(event: dict) -> None:
             "对方在让你出声。你接下来这句话会被直接转成语音发出去（就是你自己的声音）。\n"
             "所以：正常把话讲出来就行，不要提「语音」「发不出声」「我是文字」这类事，也不用解释。"
         )
-    # GitHub 那段由代码控制频率，冷却没到就压根不塞进去
-    github_extra = brag.private_block(user_id)
+    # GitHub 那段由代码控制频率，冷却没到就压根不塞进去；
+    # 主人下命令时不看冷却，强制让它说
+    github_extra = "" if brag_target else brag.private_block(user_id)
+    if brag_target:
+        where = "私聊" if brag_target == "self" else f"马上要发到群 {brag_target}"
+        extra_parts.append(brag.force_block(where))
     if github_extra:
         extra_parts.append(github_extra)
     extra = "\n".join(part for part in extra_parts if part)
@@ -461,12 +476,18 @@ async def handle_event(event: dict) -> None:
                          "被命令" if voice.commanded(text, user_id) else "随机")
 
     if not spoke:
+        to_group = brag_target if brag_target and brag_target != "self" else None
         for index, part in enumerate(parts):
             if index:
                 await asyncio.sleep(typing_delay(parts[index]))
-            await _send_with_typo(user_id, part)
+            if to_group:
+                await onebot.send_group(to_group, part)
+            else:
+                await _send_with_typo(user_id, part)
+        if to_group:
+            await onebot.send_private(user_id, f"发过去了，群 {to_group}")
 
-        for tag in sticker_tags[:1]:
+        for tag in [] if to_group else sticker_tags[:1]:
             path = stickers.path_for(tag)
             if path is None:
                 log.warning("没有这个表情：%s（可用：%s）", tag, "、".join(stickers.tag_names()))
