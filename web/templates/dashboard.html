@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>总览</h1>
+<div class="grid g4">
+  <div class="card"><div class="k">机器人</div><div class="v" style="color:var(--ok)">运行中</div><div class="k">{{ health.model }}</div></div>
+  <div class="card"><div class="k">QQ 连接</div>
+    <div class="v" style="color:{{ 'var(--ok)' if napcat.ok else 'var(--bad)' }}">{{ '在线' if napcat.ok else '掉线' }}</div>
+    <div class="k">{{ napcat.nick or napcat.error or '' }}</div></div>
+  <div class="card"><div class="k">模型接口</div>
+    <div class="v" style="color:{{ 'var(--ok)' if model.ok else 'var(--bad)' }}">{{ model.ms }}ms</div>
+    <div class="k">{{ 'HTTP ' ~ model.code if model.ok else model.error }}</div></div>
+  <div class="card"><div class="k">监控群</div><div class="v">{{ health.groups }}</div><div class="k">好感度记录 {{ people_count }} 人</div></div>
+</div>
+
+<h2>今天</h2>
+<div class="grid g4">
+  <div class="card"><div class="k">收到私聊</div><div class="v">{{ stats.received }}</div></div>
+  <div class="card"><div class="k">私聊回复</div><div class="v">{{ stats.replied }}</div></div>
+  <div class="card"><div class="k">群里发言</div><div class="v">{{ stats.group_spoke }}</div></div>
+  <div class="card"><div class="k">模型失败 / 错误</div><div class="v" style="color:{{ 'var(--warn)' if stats.model_fail else 'var(--ok)' }}">{{ stats.model_fail }} / {{ stats.errors }}</div></div>
+</div>
+
+<h2>今天的花费</h2>
+<div class="grid g4">
+  <div class="card"><div class="k">模型调用</div><div class="v">{{ usage.calls }}</div><div class="k">次</div></div>
+  <div class="card"><div class="k">输入 token</div><div class="v">{{ '{:,}'.format(usage.prompt) }}</div></div>
+  <div class="card"><div class="k">输出 token</div><div class="v">{{ '{:,}'.format(usage.completion) }}</div></div>
+  <div class="card"><div class="k">语音合成</div><div class="v">{{ usage.chars }}</div><div class="k">字 / {{ usage.voice_calls }} 段</div></div>
+  <div class="card"><div class="k">估算费用</div><div class="v">¥{{ '%.2f'|format(usage.cost) }}</div></div>
+</div>
+{% if usage.by_kind %}
+<p class="hint">
+{% for k,v in usage.by_kind.items() %}{{ k }} {{ '{:,}'.format(v) }} · {% endfor %}
+</p>
+{% endif %}
+
+<h2>余额与对账</h2>
+<div class="grid g3">
+  <div class="card">
+    <div class="k">DeepSeek 余额</div>
+    <div class="v">{{ '¥%.2f'|format(balance) if balance is not none else '查不到' }}</div>
+    <div class="k">按结算周期扣，不是实时</div>
+  </div>
+  <div class="card">
+    <div class="k">官网口径扣费</div>
+    <div class="v">{% if delta.ok %}¥{{ '%.3f'|format(delta.spent) }}{% else %}—{% endif %}</div>
+    <div class="k">{{ delta.span if delta.ok else delta.reason }}</div>
+  </div>
+  <div class="card">
+    <div class="k">同区间本地估算</div>
+    <div class="v">{% if same %}¥{{ '%.2f'|format(same.chat_cost) }}{% else %}—{% endif %}</div>
+    <div class="k">
+      {% if same and delta.ok and delta.spent > 0 %}
+        差 ¥{{ '%.2f'|format((same.chat_cost - delta.spent)|abs) }}（单价是假设值）
+      {% else %}等余额样本够了才能对账{% endif %}
+    </div>
+  </div>
+</div>
+
+<h2>语音</h2>
+<div class="card">
+  {% if voice_on %}
+  <span class="badge ok">运行中</span>
+  <span class="small dim">今天真实合成 {{ usage.voice_calls }} 段 · {{ usage.chars }} 字 · 命中缓存 {{ usage.voice_cached }} 段</span>
+  <a class="small" style="margin-left:8px" href="/admin/voice">去试听 / 换预设 →</a>
+  {% else %}
+  <span class="badge">未开启</span>
+  <span class="small dim">没配 DASHSCOPE_API_KEY 或 VOICE_ENABLED=0</span>
+  {% endif %}
+</div>
+
+<h2>最亲近的 {{ top_people|length }} 个</h2>
+{% if top_people %}
+<table class="list">
+  <tr><th>谁</th><th>等级</th><th>经验</th><th>最后互动</th></tr>
+  {% for p in top_people %}
+  <tr>
+    <td>
+      <a class="who" href="/admin/people/{{ p.qq }}">{{ p.name or p.qq }}</a>
+      {% if p.name %}<div class="mono dim">{{ p.qq }}</div>{% endif %}
+    </td>
+    <td class="mono">{{ p.tier }}</td>
+    <td>
+      <div class="mono">{{ p.exp }} / 500</div>
+      <div class="bar"><i style="width:{{ (p.exp / 5)|round(1) }}%"></i></div>
+    </td>
+    <td class="dim mono">{{ p.last_seen }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<div class="dim">还没有好感度记录</div>{% endif %}
+
+<h2>最近的群</h2>
+<table>
+  <tr><th>群</th><th>模式</th><th>阈值</th><th>随机</th><th>冷却</th><th>时/日</th></tr>
+  {% for g in groups %}
+  <tr>
+    <td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a><div class="dim">{{ g.id }}{% if g.members %} · {{ g.members }} 人{% endif %}</div></td>
+    <td>
+      {% if g.mode == 'hyper' %}<span class="badge warn">超活跃</span>
+      {% elif g.mode == 'silent' %}<span class="badge bad">关闭</span>
+      {% else %}<span class="badge">普通</span>{% endif %}
+    </td>
+    <td>{{ g.threshold }}</td>
+    <td>{{ (g.random*100)|round(0)|int }}%</td>
+    <td>{{ g.cooldown }}s</td>
+    <td>{{ g.hourly }}/{{ g.daily }}</td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>最近事件</h2>
+<div class="card">
+{% for e in events %}
+  <div class="event"><span class="t">{{ e.time[5:] }}</span><span class="l lvl-{{ e.level }}">{{ e.level }}</span><span>{{ e.msg }}</span></div>
+{% else %}
+  <div class="dim">还没有日志</div>
+{% endfor %}
+</div>
+{% endblock %}

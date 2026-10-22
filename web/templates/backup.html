@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>备份</h1>
+<p class="hint">目录 {{ dir }}。每天自动备一份，保留最近 7 份。</p>
+
+<form method="post" action="/admin/backup/create" style="margin-bottom:14px">
+  <button class="primary">现在备份一次</button>
+</form>
+
+<table>
+  <tr><th>文件</th><th>大小</th><th>时间</th><th>恢复</th></tr>
+  {% for r in rows %}
+  <tr>
+    <td class="mono">{{ r.name }}</td>
+    <td>{{ r.kb }} KB</td>
+    <td class="dim">{{ r.time }}</td>
+    <td>
+      <form method="post" action="/admin/backup/restore" class="row" style="gap:6px">
+        <input type="hidden" name="name" value="{{ r.name }}">
+        <input name="confirm" placeholder="输入「恢复」" style="width:110px">
+        <button>恢复</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="4" class="dim">还没有备份</td></tr>
+  {% endfor %}
+</table>
+<p class="hint">恢复前会自动再备份一次，防止手滑。</p>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}语音 · 大肥鱼后台{% endblock %}
+{% block content %}
+<h1>语音 <span class="dim small">{{ '已开启' if enabled else '未开启' }}</span></h1>
+
+{% if ok == 'preset' %}<div class="toast">✓ 预设已写入 .env，<b>重启后生效</b>（配置是启动时读的）</div>{% endif %}
+{% if ok == 'cleared' %}<div class="toast">✓ 缓存已清空</div>{% endif %}
+{% if ok == 'fail' %}<div class="toast bad">✗ 合成失败，看日志</div>{% endif %}
+{% if not configured %}<div class="toast bad">✗ 没有 DASHSCOPE_API_KEY 或没装 dashscope，试听用不了</div>{% endif %}
+
+<div class="grid g3">
+  <div class="card">
+    <div class="k">音色</div>
+    <div class="v small mono break">{{ voice_name }}</div>
+    <div class="k">{{ model }}</div>
+  </div>
+  <div class="card">
+    <div class="k">语速 / 音高</div>
+    <div class="v">{{ rate }} / {{ pitch }}</div>
+    <div class="k">预设：{{ current or '自定义' }}</div>
+  </div>
+  <div class="card">
+    <div class="k">缓存</div>
+    <div class="v">{{ cache.count }} <span class="small">段</span></div>
+    <div class="k">{{ (cache.size / 1024 / 1024)|round(1) }} MB · 命中不花钱</div>
+  </div>
+</div>
+
+<h2>试听</h2>
+<div class="card">
+  <form method="post" action="/admin/voice/preview">
+    <textarea name="text" style="min-height:64px" placeholder="输入一句话，合成后直接在下面播放">{{ '哟，回来啦？我？我一直在干活啊，你看我像在偷懒的样子吗。' }}</textarea>
+    <div class="row mt">
+      <div class="field"><label>语速（留空 = 当前 {{ rate }}）</label><input name="rate" type="number" step="0.01" min="0.5" max="2" value="{{ rate }}"></div>
+      <div class="field"><label>音高（留空 = 当前 {{ pitch }}）</label><input name="pitch" type="number" step="0.01" min="0.5" max="2" value="{{ pitch }}"></div>
+      <div class="field grow"><label>指令（可留空）</label><input name="instruct" value="{{ instruct }}" placeholder="例：说话带点心虚，尾音往上飘一点"></div>
+      <button class="primary" style="align-self:end">合成试听</button>
+    </div>
+  </form>
+  {% if clip %}
+  <div class="mt">
+    <div class="k mb">试听结果（这条会计入用量）</div>
+    <audio controls autoplay src="/admin/voice/clip/{{ clip }}"></audio>
+  </div>
+  {% endif %}
+  <p class="hint">试听走的是临时目录，<b>不会写进她的发送缓存</b>；但确实花了钱，所以记了账。</p>
+</div>
+
+<h2>预设风格</h2>
+<div class="card">
+  <table>
+    <tr><th>预设</th><th>语速</th><th>音高</th><th>指令</th><th></th></tr>
+    {% for name, p in presets.items() %}
+    <tr>
+      <td>{{ name }}{% if name == current %} <span class="badge ok">当前</span>{% endif %}</td>
+      <td class="mono">{{ p[0] }}</td>
+      <td class="mono">{{ p[1] }}</td>
+      <td class="dim">{{ p[2] or '（空）' }}</td>
+      <td>
+        <form method="post" action="/admin/voice/preset">
+          <input type="hidden" name="name" value="{{ name }}">
+          <button class="mini">应用</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+  <p class="hint">应用只改 <code>.env</code> 三行，<b>要重启服务才生效</b>；想立刻听效果直接用上面的试听。</p>
+</div>
+
+<h2>现在怎么触发</h2>
+<div class="grid g2">
+  <div class="card">
+    <div class="k">主动发语音的概率</div>
+    <div class="v">{{ (chance * 100)|round(0)|int }}%</div>
+    <div class="k">0% = 只有被命令才开口</div>
+  </div>
+  <div class="card">
+    <div class="k">谁能命令她</div>
+    <div class="v small mono">{{ users|join('、') if users else '（空 = 谁都不行）' }}</div>
+    <div class="k">私聊直接说／群聊要 @ · 上限 {{ cmd_chars }} 字</div>
+  </div>
+</div>
+
+<h2>今天</h2>
+<div class="grid g4">
+  <div class="card"><div class="k">真实合成</div><div class="v">{{ deals.voice_calls }}</div><div class="k">段 · {{ deals.chars }} 字</div></div>
+  <div class="card"><div class="k">命中缓存</div><div class="v">{{ deals.voice_cached }}</div><div class="k">段 · 免费</div></div>
+  <div class="card"><div class="k">语音花费</div><div class="v">¥{{ '%.3f'|format(deals.voice_cost) }}</div></div>
+  <div class="card"><div class="k">缓存清理</div>
+    <form method="post" action="/admin/voice/cache/clear" onsubmit="return confirm('清空 {{ cache.count }} 段缓存？之后同样的话会重新合成（重新花钱）')">
+      <button class="mini">清空缓存</button>
+    </form>
+    <div class="k">不会删音色，只删本地 mp3</div>
+  </div>
+</div>
+
+<h2>最近合成</h2>
+{% if recent %}
+<table>
+  <tr><th>时间</th><th>字数</th><th>音色</th></tr>
+  {% for r in recent %}
+  <tr><td class="mono dim">{{ r.when }}</td><td class="mono">{{ r.chars }}</td><td class="mono dim small break">{{ r.model }}</td></tr>
+  {% endfor %}
+</table>
+{% else %}<div class="dim">今天还没合成过</div>{% endif %}
+{% endblock %}

@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>调试台</h1>
+<p class="hint">按真实链路拼提示词，默认不发送、不写记忆。</p>
+
+<div class="card">
+  <form method="post" action="/admin/debug">
+    <div class="row">
+      <div class="field"><label>类型</label>
+        <select name="kind">
+          <option value="group" {{ 'selected' if form.kind=='group' }}>群聊</option>
+          <option value="private" {{ 'selected' if form.kind=='private' }}>私聊</option>
+        </select>
+      </div>
+      <div class="field"><label>群号</label><input name="group_id" value="{{ form.group_id or groups[0] }}" style="width:140px"></div>
+      <div class="field"><label>发信人 QQ</label><input name="user_id" value="{{ form.user_id }}" style="width:150px"></div>
+      <div class="field"><label>昵称</label><input name="nick" value="{{ form.nick or '测试' }}" style="width:100px"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div class="field" style="flex:1"><label>消息</label><input name="text" value="{{ form.text or '在吗' }}" style="width:100%"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <label class="dim"><input type="checkbox" name="call_model" value="1" {{ 'checked' if form.call_model }}> 真的调模型（会产生费用）</label>
+      <button class="primary">试跑</button>
+    </div>
+  </form>
+</div>
+
+{% if result %}
+<h2>判断</h2>
+<div class="card">
+  {% if result.kind=='group' %}
+  <div class="row">
+    <span class="badge">分数 {{ result.score }}</span>
+    <span class="badge">阈值 {{ result.threshold }}</span>
+    <span class="badge {{ 'warn' if result.directed }}">{{ '被叫到' if result.directed else '未直呼' }}</span>
+    <span class="badge {{ 'bad' if result.quiet }}">{{ '静音中' if result.quiet else '非静音' }}</span>
+    <span class="badge">配额 {{ result.quota }}</span>
+    <span class="badge {{ 'ok' if result.would_speak else '' }}">{{ '会开口' if result.would_speak else '不会开口' }}</span>
+  </div>
+  {% else %}
+  <div class="row"><span class="badge">{{ result.affinity }}</span><span class="badge">最多 {{ result.max_parts }} 条</span></div>
+  {% endif %}
+</div>
+
+{% if result.reply or result.error %}
+<h2>结果</h2>
+<div class="card">
+  {% if result.error %}<p class="badge bad">{{ result.error }}</p>{% endif %}
+  {% if result.reply %}<pre>{{ result.reply }}</pre>{% endif %}
+  {% if result.parts %}<p class="dim">分条：{{ result.parts|join(' ‖ ') }}</p>{% endif %}
+  {% if result.stickers %}<p class="dim">表情：{{ result.stickers|join('、') }}</p>{% endif %}
+  <p class="dim">耗时 {{ result.elapsed }}s</p>
+</div>
+{% endif %}
+
+<h2>System prompt</h2>
+<div class="card"><pre>{{ result.system }}</pre></div>
+
+{% if result.prompt %}
+<h2>本轮输入</h2>
+<div class="card"><pre>{{ result.prompt }}</pre></div>
+{% endif %}
+{% endif %}
+{% endblock %}

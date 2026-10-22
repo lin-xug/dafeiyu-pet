@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>按人定制提示词</h1>
+<p class="hint">只对指定 QQ 生效，追加在通用人格后面（不替换）。上限 {{ limit }} 字。标「系统」的不能删。</p>
+
+<table>
+  <tr><th>QQ</th><th>备注与提示词</th><th>字数</th><th>启用</th><th></th></tr>
+  {% for r in rows %}
+  <tr>
+    <td class="mono">{{ r.qq }}{% if r.system %}<div><span class="badge warn">系统</span></div>{% endif %}</td>
+    <td>
+      <form method="post" action="/admin/relations">
+        <input type="hidden" name="action" value="update"><input type="hidden" name="qq" value="{{ r.qq }}">
+        <input name="name" value="{{ r.name }}" placeholder="备注" class="w-num" maxlength="32">
+        <div class="mt"><textarea name="prompt" style="min-height:90px">{{ r.prompt }}</textarea></div>
+        <div class="mt">
+          <label class="dim"><input type="checkbox" name="enabled" value="1" {{ 'checked' if r.enabled }}> 启用</label>
+          <button class="primary">保存</button>
+        </div>
+      </form>
+    </td>
+    <td class="mono">{{ r.chars }}/{{ limit }}</td>
+    <td>{% if r.enabled %}<span class="badge ok">开</span>{% else %}<span class="badge">关</span>{% endif %}</td>
+    <td>
+      {% if not r.system %}
+      <form method="post" action="/admin/relations">
+        <input type="hidden" name="action" value="delete"><input type="hidden" name="qq" value="{{ r.qq }}">
+        <button>删除</button>
+      </form>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+
+<h2>新增</h2>
+<div class="card">
+  <form method="post" action="/admin/relations" class="row">
+    <input type="hidden" name="action" value="add">
+    <div class="field"><label>QQ</label><input name="qq" placeholder="123456789" style="width:140px"></div>
+    <div class="field"><label>备注</label><input name="name" placeholder="表哥" style="width:100px"></div>
+    <div class="field" style="flex:1"><label>提示词</label><textarea name="prompt" placeholder="这是你表哥，说话可以没大没小……" style="min-height:80px"></textarea></div>
+    <label class="dim" style="align-self:end"><input type="checkbox" name="enabled" value="1" checked> 启用</label>
+    <button class="primary" style="align-self:end">添加</button>
+  </form>
+</div>
+{% endblock %}

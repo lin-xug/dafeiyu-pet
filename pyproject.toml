@@ -1,0 +1,7 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "B"]
+# B008: FastAPI 的依赖注入就是 File(...)/Form(...) 写在默认值里
+ignore = ["B008", "E501"]

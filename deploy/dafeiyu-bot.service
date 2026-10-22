@@ -1,0 +1,22 @@
+# 用法：把 /path/to/dafeiyu 换成你的实际路径，复制到 ~/.config/systemd/user/
+# 然后：systemctl --user daemon-reload && systemctl --user enable --now dafeiyu-bot
+
+[Unit]
+Description=DaFeiYu QQ bot
+After=network-online.target napcat.service
+Wants=napcat.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/dafeiyu
+ExecStart=/path/to/dafeiyu/.venv/bin/python run.py
+Restart=always
+RestartSec=5
+# Electron 系进程只 TERM 主进程会留孤儿，这里整组收
+KillMode=mixed
+TimeoutStopSec=10
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

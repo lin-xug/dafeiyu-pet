@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>群管理</h1>
+<p class="hint">这里改的是 groups.json；超活跃模式会覆盖随机率和冷却。</p>
+<table>
+  <tr><th>群</th><th>白名单</th><th>模式</th><th>阈值</th><th>随机</th><th>冷却</th><th>时/日</th><th></th></tr>
+  {% for g in groups %}
+  <tr>
+    <td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a><div class="dim">{{ g.id }}{% if g.members %} · {{ g.members }} 人{% endif %}</div></td>
+    <td>{% if g.enabled %}<span class="badge ok">在</span>{% else %}<span class="badge">不在</span>{% endif %}</td>
+    <td>
+      {% if g.mode == 'hyper' %}<span class="badge warn">超活跃</span>
+      {% elif g.mode == 'silent' %}<span class="badge bad">关闭</span>
+      {% else %}<span class="badge">普通</span>{% endif %}
+    </td>
+    <td>{{ g.threshold }}</td>
+    <td>{{ (g.random*100)|round(0)|int }}%</td>
+    <td>{{ g.cooldown }}s</td>
+    <td>{{ g.hourly }}/{{ g.daily }}</td>
+    <td><a href="/admin/groups/{{ g.id }}">编辑 →</a></td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

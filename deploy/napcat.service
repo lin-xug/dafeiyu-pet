@@ -1,0 +1,27 @@
+# 用法：
+#   1. 把 /path/to/dafeiyu、/path/to/Napcat、YOUR_QQ 换成实际值
+#   2. 复制到 ~/.config/systemd/user/
+#   3. systemctl --user daemon-reload && systemctl --user enable --now napcat
+#
+# 关键点：
+#   - WorkingDirectory 要和 napcat/start.sh 一致（QQ 会把 guild1.db 这类文件写在这）
+#   - -q <QQ号> 是"快速登录"：不带它，每次冷启动都会打印二维码等人扫
+#   - KillMode=control-group：只 TERM 主进程会留下 xvfb/子进程
+
+[Unit]
+Description=NapCat QQ / OneBot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/path/to/dafeiyu/napcat
+ExecStart=/usr/bin/xvfb-run -a -s "-screen 0 1280x800x24" /path/to/Napcat/opt/QQ/qq --no-sandbox -q YOUR_QQ
+Restart=always
+RestartSec=15
+StartLimitIntervalSec=0
+KillMode=control-group
+TimeoutStopSec=20
+
+[Install]
+WantedBy=default.target

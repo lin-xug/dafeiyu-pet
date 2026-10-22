@@ -1,0 +1,7 @@
+fastapi>=0.110
+uvicorn>=0.29
+httpx>=0.27
+pillow>=10
+
+# 可选：只有「语音」功能需要，不装也能正常跑文字
+# dashscope>=1.20

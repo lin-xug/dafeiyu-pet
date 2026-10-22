@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>人格与提示词</h1>
+<p class="hint">文本存在 {{ dir }}。保存前会自动留一份历史（每个文件保留最近 20 版）。改完去<a href="/admin/debug">调试台</a>试跑。</p>
+
+{% for s in sections %}
+<div class="card" style="margin-bottom:14px">
+  <div class="row" style="justify-content:space-between">
+    <strong>{{ s.label }}</strong>
+    <span class="dim">{{ s.chars }} 字 · {{ s.key }}.md</span>
+  </div>
+  <form method="post" action="/admin/persona/{{ s.key }}">
+    <textarea name="text" style="margin-top:8px;min-height:{{ 220 if s.key=='persona' else 100 }}px">{{ s.text }}</textarea>
+    <p style="margin:8px 0 0"><button class="primary">保存 {{ s.label }}</button></p>
+  </form>
+</div>
+{% endfor %}
+
+<h2>知识库</h2>
+<div class="card">
+  <p class="dim">挂在群上的背景资料（groups.json 里配 kb 名）。当前文件：{{ kb_files|join('、') or '无' }}</p>
+</div>
+{% endblock %}

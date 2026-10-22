@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>表情包</h1>
+<p class="hint">目录 {{ dir }}。标签决定她什么时候发这张。</p>
+
+<div class="grid" style="grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px">
+  {% for r in rows %}
+  <div class="card" style="padding:10px">
+    <img src="/admin/stickers/file/{{ r.name }}" alt="" style="width:100%;height:120px;object-fit:contain;background:#0b0e13;border-radius:8px">
+    <div class="mono dim" style="font-size:11px;margin:6px 0;word-break:break-all">{{ r.name }}</div>
+    <div style="margin-bottom:6px">
+      {% for t in r.tags %}<span class="badge">{{ t }}</span> {% endfor %}
+      {% if not r.tags %}<span class="badge warn">未标</span>{% endif %}
+    </div>
+    <form method="post" action="/admin/stickers/tag" class="row" style="gap:6px">
+      <input type="hidden" name="name" value="{{ r.name }}">
+      <input name="tag" placeholder="标签" style="width:80px">
+      <button>改</button>
+    </form>
+    <form method="post" action="/admin/stickers/delete" style="margin-top:6px">
+      <input type="hidden" name="name" value="{{ r.name }}">
+      <button>删除</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+
+<h2>上传</h2>
+<div class="card">
+  <form method="post" action="/admin/stickers/upload" enctype="multipart/form-data" class="row">
+    <input type="file" name="file" accept="image/*">
+    <input name="tag" placeholder="标签（可留空）" style="width:140px">
+    <button class="primary">上传</button>
+  </form>
+  <p class="hint">上传的图会按内容去重、转成 PNG 保留透明。</p>
+</div>
+{% endblock %}

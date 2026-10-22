@@ -1,0 +1,29 @@
+# ---- 运行环境 ----
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# ---- 本地配置与状态（绝对不要提交）----
+.env
+.run/
+.tmp/
+*.log
+data/
+
+# ---- 个人内容，不进公开仓库 ----
+# 交接笔记：含真实 QQ、服务器路径、运维细节
+HANDOVER.md
+# 旧 README（内部设计笔记）
+README.dev.md
+# 每个群的真实群号与参数
+groups.json
+# NapCat / QQ 本体副本 + 登录态数据库（几十 MB）
+napcat/
+# 会话记忆
+.workbuddy/
+.Trash-0/
+
+# ---- 表情包图片：只保留说明文件 ----
+杂图/*
+!杂图/README.md

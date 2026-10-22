@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ name or qq }} · 大肥鱼后台{% endblock %}
+{% block content %}
+<h1>
+  {{ name or qq }}
+  <span class="dim small mono">{{ qq }}</span>
+</h1>
+{% if nick and name != nick %}<p class="hint">群里最近叫「{{ nick }}」（每 30 秒刷新一次）</p>{% endif %}
+<p><a href="/admin/people">← 返回列表</a></p>
+
+{% if ok %}<div class="toast">✓ 备注已保存</div>{% endif %}
+
+<form class="toolbar" method="post" action="/admin/people/{{ qq }}/alias">
+  <input name="name" value="{{ alias }}" placeholder="备注：起个你一眼认得出的名字" maxlength="32" class="grow">
+  <input type="hidden" name="back" value="person">
+  <button class="primary">保存备注</button>
+</form>
+<p class="hint">备注只改后台显示，不影响她说话。清空后保存 = 删掉备注。</p>
+
+<div class="grid g2">
+  <div class="card">
+    <h2 class="first">调整</h2>
+    <form method="post" action="/admin/people/{{ qq }}/affinity" class="row">
+      <select name="action">
+        <option value="add">加/减</option>
+        <option value="set">直接设为</option>
+        <option value="lock">锁满</option>
+        <option value="unlock">解锁</option>
+        <option value="reset">重置为 0</option>
+      </select>
+      <input name="value" type="number" value="10" class="w-num">
+      <button class="primary">执行</button>
+    </form>
+    <p class="hint">经验 {{ a.exp }} / 500，当前 {{ a.tier }}。被惹毛状态：{{ '是' if a.mood() else '否' }}</p>
+  </div>
+  <div class="card">
+    <h2 class="first">这轮她大概会怎么说话</h2>
+    <p class="dim mono small">{{ special if special else '（没有专属设定，按通用人格）' }}</p>
+  </div>
+</div>
+
+<h2>事实库</h2>
+<div class="card">
+  {% if facts %}
+  <table><tr><th>内容</th><th>类型</th><th>过期</th></tr>
+  {% for f in facts %}
+    <tr><td>{{ f.text }}</td><td><span class="badge">{{ f.kind }}</span></td>
+    <td class="dim">{{ '永久' if not f.expire else f.expire }}</td></tr>
+  {% endfor %}</table>
+  {% else %}<div class="dim">还没有</div>{% endif %}
+</div>
+
+<h2>记忆</h2>
+<div class="grid g2">
+  <div class="card">
+    <div class="k">私聊摘要</div>
+    <pre>{{ summary or '（没有摘要）' }}</pre>
+  </div>
+  <div class="card">
+    <div class="k">最近私聊</div>
+    <pre>{% for m in hist %}{{ '他' if m.role=='user' else '她' }}：{{ m.content }}
+{% else %}（没有记录）{% endfor %}</pre>
+  </div>
+</div>
+
+<h2>群里的印象</h2>
+{% for g in group_mem %}
+<div class="card mb">
+  <div class="k">群 {{ g.gid }}{% if g.nick %} · {{ g.nick }}{% endif %}</div>
+  <pre>{{ g.summary or (g.recent|join(' / ')) or '（没有）' }}</pre>
+</div>
+{% else %}<div class="dim">没有群记录</div>{% endfor %}
+{% endblock %}

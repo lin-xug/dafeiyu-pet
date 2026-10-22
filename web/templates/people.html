@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}好感度 · 大肥鱼后台{% endblock %}
+{% block content %}
+<h1>好感度 <span class="dim small">{{ people|length }} / {{ total }} 人</span></h1>
+<p class="hint">经验 0~500，30/90/180/300 分档。锁死的人不会再变。<b>备注只影响后台显示，她不会知道。</b></p>
+
+{% if ok %}<div class="toast">✓ 备注已保存</div>{% endif %}
+
+<form class="toolbar" method="get" action="/admin/people">
+  <input type="search" name="q" value="{{ q }}" placeholder="搜 QQ / 备注 / 昵称" class="grow">
+  <button>筛选</button>
+  {% if q %}<a class="btn-like" href="/admin/people">清空</a>{% endif %}
+</form>
+
+<table class="list">
+  <thead>
+    <tr>
+      <th>谁</th><th class="w-tight">等级</th><th class="w-exp">经验</th>
+      <th class="w-time">最后互动</th><th class="w-tag">标记</th><th class="w-remark">备注</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for p in people %}
+  <tr>
+    <td>
+      <a class="who" href="/admin/people/{{ p.qq }}">{{ p.name or p.qq }}</a>
+      {% if p.name %}
+      <div class="mono dim">{{ p.qq }}{% if p.alias and p.nick and p.alias != p.nick %} · 群里叫「{{ p.nick }}」{% endif %}</div>
+      {% endif %}
+    </td>
+    <td class="mono">{{ p.tier }}</td>
+    <td>
+      <div class="mono">{{ p.exp }} / 500</div>
+      <div class="bar"><i style="width:{{ (p.exp / 5)|round(1) }}%"></i></div>
+    </td>
+    <td class="dim mono">{{ p.last_seen }}</td>
+    <td class="nowrap">
+      {% if p.special %}<span class="badge warn">特殊</span>{% endif %}
+      {% if p.locked %}<span class="badge ok">锁死</span>{% endif %}
+    </td>
+    <td>
+      <form class="inline" method="post" action="/admin/people/{{ p.qq }}/alias">
+        <input name="name" value="{{ p.alias }}" placeholder="起个名" maxlength="32">
+        <button class="mini">存</button>
+      </form>
+    </td>
+  </tr>
+  {% else %}
+  <tr><td colspan="6" class="empty">{% if q %}没搜到「{{ q }}」{% else %}还没有人跟她说过话{% endif %}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
