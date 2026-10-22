@@ -9,7 +9,24 @@ import re
 import time
 from datetime import datetime
 
-from . import affinity, billing, config, facts, group, llm, memory, modes, onebot, persona, stickers, tasks, vision, voice
+from . import (
+    affinity,
+    billing,
+    brag,
+    config,
+    facts,
+    group,
+    llm,
+    memory,
+    modes,
+    onebot,
+    persona,
+    requests,
+    stickers,
+    tasks,
+    vision,
+    voice,
+)
 
 log = logging.getLogger("dafeiyu")
 
@@ -288,7 +305,32 @@ async def _maybe_summarize(user_id: str) -> None:
         _summarizing_users.discard(user_id)
 
 
+async def _can_manage(user_id: str) -> bool:
+    """谁能处理好友/入群申请。配了 OWNER_IDS 就只认那些号，没配就退回"特殊关系"。"""
+    owners = requests.owners()
+    if owners:
+        return str(user_id) in owners
+    return persona.is_special(user_id)
+
+
+async def _handle_request(event: dict) -> None:
+    """有人申请加好友 / 进群。存下 flag 并私信主人，等他下命令。"""
+    item = requests.ingest(event)
+    if not item:
+        return
+    log.info("收到申请：%s %s", item.get("kind"), item.get("user_id"))
+    owners = requests.owners()
+    if not owners:
+        log.warning("没配 OWNER_IDS，申请通知发不出去")
+        return
+    for owner in owners:
+        await onebot.send_private(owner, requests.notify_text(item))
+
+
 async def handle_event(event: dict) -> None:
+    if event.get("post_type") == "request":
+        await _handle_request(event)
+        return
     if event.get("post_type") != "message":
         return
     kind = event.get("message_type")
@@ -328,6 +370,13 @@ async def handle_event(event: dict) -> None:
         await onebot.send_private(user_id, bill_reply)
         return
 
+    # ---- 好友 / 入群申请：先于模型，命中就走这里 ----
+    if text:
+        req_reply = await requests.handle_command(text, user_id, await _can_manage(user_id))
+        if req_reply:
+            await onebot.send_private(user_id, req_reply)
+            return
+
     # ---- 记一句，攒够就抽事实 ----
     facts.record_utterance(user_id, text)
     if facts.needs_extract(user_id) and not config.MOCK_LLM and facts.try_start(user_id):
@@ -366,6 +415,10 @@ async def handle_event(event: dict) -> None:
             "对方在让你出声。你接下来这句话会被直接转成语音发出去（就是你自己的声音）。\n"
             "所以：正常把话讲出来就行，不要提「语音」「发不出声」「我是文字」这类事，也不用解释。"
         )
+    # GitHub 那段由代码控制频率，冷却没到就压根不塞进去
+    github_extra = brag.private_block(user_id)
+    if github_extra:
+        extra_parts.append(github_extra)
     extra = "\n".join(part for part in extra_parts if part)
 
     system_prompt = persona.build_system_prompt(

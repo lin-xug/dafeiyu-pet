@@ -10,6 +10,7 @@ import json
 from . import config
 from .persona_defaults import (
     EXAMPLES,
+    GITHUB,
     GROUP_RULES,
     OUTPUT,
     PERSONA,
@@ -27,6 +28,7 @@ FILES = {
     "output": ("output.md", OUTPUT),
     "group_rules": ("group_rules.md", GROUP_RULES),
     "private_rules": ("private_rules.md", PRIVATE_RULES),
+    "github": ("github.md", GITHUB),
 }
 
 _cache: dict[str, tuple[float, str]] = {}
@@ -120,6 +122,13 @@ def build_system_prompt(extra: str = "", sticker_tags: list[str] | None = None) 
     if extra:
         parts.append("【当前场景的补充信息】\n" + extra)
     return "\n\n".join(parts)
+
+
+def github_block() -> str:
+    """「我知道自己被开源」这段。没配 GITHUB_URL 就不注入，链接不会凭空出现。"""
+    if not config.GITHUB_URL:
+        return ""
+    return get("github").replace("{url}", config.GITHUB_URL)
 
 
 def group_rules() -> str:

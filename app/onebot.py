@@ -175,6 +175,32 @@ async def recall(message_id: int) -> bool:
     return await _call("delete_msg", {"message_id": message_id}) is not None
 
 
+async def set_friend_add_request(flag: str, approve: bool, remark: str = "") -> bool:
+    """处理别人发来的好友申请。flag 只在 request 事件里给，过期就废了。"""
+    if config.DRY_RUN:
+        log.info("[DRY_RUN] %s 好友申请 flag=%s", "同意" if approve else "拒绝", flag[:16])
+        return True
+    body = await _call(
+        "set_friend_add_request",
+        {"flag": flag, "approve": approve, "remark": remark},
+    )
+    return body is not None
+
+
+async def set_group_add_request(
+    flag: str, sub_type: str, approve: bool, reason: str = ""
+) -> bool:
+    """处理入群申请 / 进群邀请。sub_type 是 add（申请加群）或 invite（被邀请）。"""
+    if config.DRY_RUN:
+        log.info("[DRY_RUN] %s 入群申请(%s) flag=%s", "同意" if approve else "拒绝", sub_type, flag[:16])
+        return True
+    body = await _call(
+        "set_group_add_request",
+        {"flag": flag, "sub_type": sub_type, "approve": approve, "reason": reason},
+    )
+    return body is not None
+
+
 async def send_group(group_id: str, text: str, at_user: str | None = None) -> int | None:
     """往群里发一条文字，可选 @ 某个人。"""
     global _counter

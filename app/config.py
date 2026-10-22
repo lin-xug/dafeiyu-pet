@@ -175,6 +175,23 @@ HYPER_COOLDOWN = _int("HYPER_COOLDOWN", 10)
 HYPER_HOURLY = _int("HYPER_HOURLY", 120)
 HYPER_DAILY = _int("HYPER_DAILY", 1000)
 
+# ---- 好友申请 / 入群申请 ----
+# 谁能收到申请通知并用命令处理；默认跟账单白名单同一批人
+OWNER_IDS = {
+    u.strip()
+    for u in os.getenv("OWNER_IDS", os.getenv("OWNER_ID", "")).split(",")
+    if u.strip()
+} or ADMIN_USERS
+# 申请事件里的 flag 有效期（秒），过期就只能让对方重新申请
+REQUEST_TTL = _int("REQUEST_TTL", 1800)
+
+# ---- GitHub 人设（可选）----
+# 填了才会把「我知道自己被开源」这段注入人格，并把链接交给它
+GITHUB_URL = os.getenv("GITHUB_URL", "").strip()
+# 求赞限频：私聊隔多少天才能提一次，群里隔多少天才能提一次
+GITHUB_BRAG_PRIVATE_DAYS = _int("GITHUB_BRAG_PRIVATE_DAYS", 3)
+GITHUB_BRAG_GROUP_DAYS = _int("GITHUB_BRAG_GROUP_DAYS", 7)
+
 # ---- 收图 ----
 # 收到图片时自动存进 杂图/（只对特殊关系的人生效）
 COLLECT_IMAGES = _bool("COLLECT_IMAGES", True)

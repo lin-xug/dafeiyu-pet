@@ -18,7 +18,23 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from . import affinity, billing, config, facts, gmemory, llm, modes, onebot, persona, playbook, stickers, tasks, vision, voice
+from . import (
+    affinity,
+    billing,
+    brag,
+    config,
+    facts,
+    gmemory,
+    llm,
+    modes,
+    onebot,
+    persona,
+    playbook,
+    stickers,
+    tasks,
+    vision,
+    voice,
+)
 
 log = logging.getLogger("dafeiyu")
 
@@ -455,6 +471,7 @@ async def handle(event: dict) -> None:
             persona.relation_hint(user_id),
             affinity.tone_block(aff),
             facts.block(user_id),
+            brag.group_block(group_id),  # GitHub 那段由代码限频，冷却没到就不出现
         )
         if p
     )
