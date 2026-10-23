@@ -136,5 +136,53 @@ class VoiceCommandTest(unittest.TestCase):
         self.assertTrue(voice.should_speak(long_reply, user_text="说句话", user_id="10001"))
 
 
+class VoiceIPv4Test(unittest.TestCase):
+    """阿里云同时有 AAAA 记录，而很多网络有 IPv6 地址却没有 IPv6 路由。
+
+    Python 会先试 IPv6 并卡到超时，dashscope 不等回退直接报
+    「websocket connection could not established within 5s」，语音就哑了。
+    """
+
+    def setUp(self):
+        import socket
+
+        self.socket = socket
+        self.calls = []
+        self._real = socket.getaddrinfo
+
+        def spy(host, port, family=0, *args, **kwargs):
+            self.calls.append((host, family))
+            return [("fake", "fake", "fake", "fake", ("1.2.3.4", 443))]
+
+        self.spy = spy
+        socket.getaddrinfo = spy
+
+    def tearDown(self):
+        self.socket.getaddrinfo = self._real
+
+    def test_dashscope_forced_to_ipv4(self):
+        with voice._ipv4_only():
+            self.socket.getaddrinfo("dashscope.aliyuncs.com", 443, 0, self.socket.SOCK_STREAM)
+        self.assertEqual(self.calls, [("dashscope.aliyuncs.com", self.socket.AF_INET)])
+
+    def test_other_hosts_untouched(self):
+        with voice._ipv4_only():
+            self.socket.getaddrinfo("api.deepseek.com", 443, 0, self.socket.SOCK_STREAM)
+        self.assertEqual(self.calls, [("api.deepseek.com", 0)])
+
+    def test_explicit_family_respected(self):
+        # 调用方明确要 IPv6 时不该被改写
+        with voice._ipv4_only():
+            self.socket.getaddrinfo(
+                "dashscope.aliyuncs.com", 443, self.socket.AF_INET6, self.socket.SOCK_STREAM
+            )
+        self.assertEqual(self.calls[0][1], self.socket.AF_INET6)
+
+    def test_restores_on_exit(self):
+        with voice._ipv4_only():
+            pass
+        self.assertIs(self.socket.getaddrinfo, self.spy)
+
+
 if __name__ == "__main__":
     unittest.main()

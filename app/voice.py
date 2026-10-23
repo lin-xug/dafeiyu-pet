@@ -10,10 +10,12 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
 import logging
 import random
 import re
+import socket
 from pathlib import Path
 
 from . import config, usage
@@ -115,6 +117,29 @@ def should_speak(reply: str, *, user_text: str = "", user_id: str = "", is_at: b
     return forced or random.random() < config.VOICE_CHANCE
 
 
+@contextlib.contextmanager
+def _ipv4_only():
+    """让 dashscope 的域名只解析出 IPv4。
+
+    阿里云同时有 AAAA 记录，而不少网络（校园网、部分宽带）有 IPv6 地址却没有
+    IPv6 路由。Python 会先试 IPv6 并一直卡到超时，dashscope SDK 等不及回退，
+    直接抛「websocket connection could not established within 5s」。
+    这里只改 dashscope 的解析族，其它请求不受影响。
+    """
+    original = socket.getaddrinfo
+
+    def patched(host, port, family=0, *args, **kwargs):
+        if family in (0, socket.AF_UNSPEC) and "dashscope" in str(host).lower():
+            family = socket.AF_INET
+        return original(host, port, family, *args, **kwargs)
+
+    socket.getaddrinfo = patched
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
 def _synth_sync(
     text: str,
     *,
@@ -124,15 +149,22 @@ def _synth_sync(
 ) -> bytes:
     from dashscope.audio.tts_v2 import AudioFormat, SpeechSynthesizer
 
-    synth = SpeechSynthesizer(
-        model=config.VOICE_MODEL,
-        voice=config.VOICE_NAME,
-        instruction=(config.VOICE_INSTRUCT if instruct is None else instruct) or None,
-        speech_rate=config.VOICE_RATE if rate is None else rate,
-        pitch_rate=config.VOICE_PITCH if pitch is None else pitch,
-        format=AudioFormat.MP3_22050HZ_MONO_256KBPS,
-    )
-    return synth.call(text)
+    def build() -> SpeechSynthesizer:
+        return SpeechSynthesizer(
+            model=config.VOICE_MODEL,
+            voice=config.VOICE_NAME,
+            instruction=(config.VOICE_INSTRUCT if instruct is None else instruct) or None,
+            speech_rate=config.VOICE_RATE if rate is None else rate,
+            pitch_rate=config.VOICE_PITCH if pitch is None else pitch,
+            format=AudioFormat.MP3_22050HZ_MONO_256KBPS,
+        )
+
+    try:
+        with _ipv4_only():
+            return build().call(text)
+    except Exception as exc:  # noqa: BLE001 - 换了解析方式再试一次
+        log.debug("IPv4 合成失败，退回系统解析：%s", exc)
+    return build().call(text)
 
 
 async def synth(text: str) -> Path | None:

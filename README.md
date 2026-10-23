@@ -2,7 +2,7 @@
 
 > 不是一个"有问必答"的客服机器人，而是一个有脾气、有记忆、知道什么时候该闭嘴的群友。
 
-`Python 3.10+` · `FastAPI` · `OneBot v11` · `纯文件存储（无数据库）` · `127 个单元测试`
+`Python 3.10+` · `FastAPI` · `OneBot v11` · `纯文件存储（无数据库）` · `131 个单元测试`
 
 仓库：<https://github.com/lin-xug/dafeiyu-pet>
 
@@ -179,7 +179,7 @@
 
 ### 工程配套
 
-- **127 个单元测试**，测试进程自动把数据目录切到临时目录，不碰真实数据
+- **131 个单元测试**，测试进程自动把数据目录切到临时目录，不碰真实数据
 - **密钥守护**：`tests/test_no_secrets.py` 扫描已跟踪文件，出现 `sk-…` 真实密钥直接测试失败；
   另有 `.githooks/pre-commit` 在提交时拦截（`git config core.hooksPath .githooks` 启用一次）
 - **离线模拟**：`MOCK_LLM=1 DRY_RUN=1` 可以不连 QQ、不花 key 跑通整条链路
