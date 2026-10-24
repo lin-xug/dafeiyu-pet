@@ -319,8 +319,6 @@ async def handle(event: dict) -> None:
     from .bot import extract  # 避免循环导入
 
     text, images = extract(event)
-    if not text and not images:
-        return
 
     sender = event.get("sender") or {}
     nick = sender.get("card") or sender.get("nickname") or user_id
@@ -328,9 +326,16 @@ async def handle(event: dict) -> None:
 
     # 有的客户端把 @ 当普通文字发过来（日志里会出现 "@大肥鱼 查询好感度" 这种），
     # 这种也当 @ 处理，否则那条消息既不算直呼、查询好感也会被挡掉
-    if not is_at and re.search(r"[@＠]", text) and any(w in text.lower() for w in NAME_WORDS):
+    if not is_at and text and re.search(r"[@＠]", text) and any(w in text.lower() for w in NAME_WORDS):
         is_at = True
         log.info("群 %s 把文本里的 @ 当成了真的 @：%s", group_id, text[:20])
+
+    # 光 @ 不说话也得应一声，不然像没听见。补个占位让后面的流程照常走。
+    bare_at = is_at and not text and not images
+    if bare_at:
+        text = "（只@了你，一个字没说）"
+    elif not text and not images:
+        return
 
     # 模式命令优先处理：哪怕现在是「关闭模式」，也得让她能听见「打开模式」
     if persona.is_special(user_id):
@@ -358,7 +363,8 @@ async def handle(event: dict) -> None:
 
     # 主人命令：推销一下自己（群里必须 @ 才认，别人喊不动它打广告）
     brag_cmd = False
-    if is_at and text and persona.is_special(user_id) and brag.match(text):
+    # 主人自己 @ 的可以偷懒不点名"自己"（"推销一下"也认），别人一律按 strict 判
+    if is_at and text and persona.is_special(user_id) and brag.match(text, loose=True):
         if not config.GITHUB_URL:
             await onebot.send_group(group_id, "没配 GitHub 链接，我推销不了")
             return
@@ -407,7 +413,8 @@ async def handle(event: dict) -> None:
     st.timeline.append(entry)
     _append_log(group_id, entry)
     gmemory.record(group_id, user_id, nick, text or "[图片]")
-    facts.record_utterance(user_id, text)
+    if not bare_at:  # 「只@了你」是补的占位，不是他真说的话，别喂给事实库
+        facts.record_utterance(user_id, text)
     if facts.needs_extract(user_id) and not config.MOCK_LLM and facts.try_start(user_id):
         tasks.spawn(facts.extract(user_id, llm.chat, source=f"group:{group_id}"), name=f"fact:{user_id}")
 
@@ -457,7 +464,10 @@ async def handle(event: dict) -> None:
         " 直呼" if directed else "",
     )
 
-    if directed and not brag_cmd:
+    if brag_cmd:
+        # 主人亲自喊的：不占配额、不看冷却、不管是不是深夜——喊了就必须说
+        pass
+    elif directed:
         # 被点名就走宽松额度：不看静音、不占日常配额，只防刷屏
         if _direct_left(st, conf) <= 0:
             log.info("群 %s 被点名次数到顶（每小时 %d 次），这轮不回", group_id, conf["direct_hourly"])
@@ -588,7 +598,10 @@ async def handle(event: dict) -> None:
                 aff.save(user_id)
     else:
         st.hour_marks.append(now)
-    st.day_count += 1
+        # 只有「自己主动接话」才占日配额。
+        # 被 @ 的回复本来就不受配额限制，如果照样 +1，活跃群一天被 @ 上百次
+        # 会把 day_count 顶穿（日志里出现过「日 -124」），之后所有主动接话全被拦死。
+        st.day_count += 1
     _append_log(group_id, {"user_id": self_id, "nick": "你", "text": " ".join(parts), "is_bot": True, "ts": now})
     log.info("群 %s 说了(%.2f)：%s", group_id, score, " / ".join(parts))
     tasks.spawn(_maybe_summarize_person(group_id, user_id, nick), name=f"psum:{group_id}:{user_id}")
