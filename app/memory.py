@@ -11,7 +11,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import config
+from . import config, timefmt
 
 MAX_TURNS = config.HISTORY_TURNS
 # 文件里最多留多少条，防止摘要一直失败把文件撑爆
@@ -81,6 +81,23 @@ def recent(user_id: str, turns: int | None = None) -> list[dict]:
     limit = turns or MAX_TURNS
     messages = load(user_id)
     return [{"role": m["role"], "content": m["content"]} for m in messages[-limit * 2 :]]
+
+
+def recent_raw(user_id: str, turns: int | None = None) -> list[dict]:
+    """最近 N 轮的原记录，保留 ts。给「这段对话聊了多久」用。"""
+    limit = turns or MAX_TURNS
+    return load(user_id)[-limit * 2 :]
+
+
+def span_text(user_id: str) -> str:
+    """这段对话从什么时候聊到现在。真实链路和调试台都调这一个，免得两边走样。"""
+    raw = recent_raw(user_id)
+    if not raw:
+        return ""
+    span = timefmt.span(raw[0].get("ts"), raw[-1].get("ts"))
+    if not span:
+        return ""
+    return f"【这段对话的时间】{span}（共 {len(raw)} 条）"
 
 
 def load_summary(user_id: str) -> str:

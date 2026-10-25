@@ -25,6 +25,7 @@ async def preview_private(user_id: str, text: str, call_model: bool = True) -> d
             affinity.tone_block(aff),
             facts.block(user_id, query=text),
             kbindex.block(text),  # 跟真链路保持一致
+            memory.span_text(user_id),  # 同上
             ("【你记得关于这个人的事】\n" + summary) if summary else "",
         )
         if part

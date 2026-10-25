@@ -427,6 +427,8 @@ async def handle_event(event: dict) -> None:
         facts.block(user_id, query=text),
         # 命中了知识库索引就临时挂一段判断依据（比如「对方是不是在跟你认亲」）
         kbindex.block(text),
+        # 这段对话是从什么时候聊到现在的：让它分得清「刚说的」和「昨天说的」
+        memory.span_text(user_id),
     ]
     if summary:
         extra_parts.append("【你记得关于这个人的事】\n" + summary)

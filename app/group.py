@@ -33,6 +33,7 @@ from . import (
     playbook,
     stickers,
     tasks,
+    timefmt,
     vision,
     voice,
 )
@@ -264,9 +265,13 @@ def _person_block(group_id: str, user_id: str, nick: str) -> str:
     """这个人在这个群说过的话 + 长期摘要。"""
     parts = []
     who = _who(nick, user_id)
-    lines = gmemory.recent(group_id, user_id, 10)
-    if lines:
-        parts.append(f"【{who} 最近在这个群说过】\n" + "\n".join(f"- {t}" for t in lines))
+    rows = gmemory.recent_rows(group_id, user_id, 10)
+    if rows:
+        lines = []
+        for text, ts in rows:
+            when = timefmt.stamp(ts)
+            lines.append(f"- [{when}] {text}" if when else f"- {text}")
+        parts.append(f"【{who} 最近在这个群说过】\n" + "\n".join(lines))
     psum = gmemory.summary(group_id, user_id)
     if psum:
         parts.append(f"【你对 {who} 的了解】\n{psum}")
@@ -301,7 +306,8 @@ def _transcript(state: GroupState) -> str:
         text = m.get("text") or ""
         if m.get("has_image") and not text:
             text = "（发了张图）"
-        lines.append(f"{who}：{text}")
+        when = timefmt.stamp(m.get("ts"))
+        lines.append(f"[{when}] {who}：{text}" if when else f"{who}：{text}")
     return "\n".join(lines)
 
 

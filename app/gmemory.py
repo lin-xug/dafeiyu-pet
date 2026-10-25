@@ -167,6 +167,14 @@ def recent(group_id: str, user_id: str, limit: int = 10) -> list[str]:
     return [m["text"] for m in _read(group_id, user_id)["messages"][-limit:]]
 
 
+def recent_rows(group_id: str, user_id: str, limit: int = 10) -> list[tuple[str, float]]:
+    """最近的原话，带上说的时间。给提示词里标「这是什么时候说的」用。"""
+    return [
+        (m.get("text", ""), float(m.get("ts") or 0))
+        for m in _read(group_id, user_id)["messages"][-limit:]
+    ]
+
+
 def summary(group_id: str, user_id: str) -> str:
     return _read(group_id, user_id).get("summary", "")
 
