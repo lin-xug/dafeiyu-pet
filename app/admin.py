@@ -125,7 +125,7 @@ async def dashboard(request: Request):
             "nav": "dashboard",
             "napcat": _napcat(),
             "model": _model_ping(),
-            "health": {"model": config.MODEL, "groups": len(config.GROUPS)},
+            "health": {"model": config.MODEL, "groups": len(config.groups())},
             "stats": _today_stats(log_text),
             "events": _recent_events(log_text),
             "groups": groups_info,
@@ -158,7 +158,8 @@ def _group_rows() -> list[dict]:
         pass
 
     rows = []
-    for gid in sorted(config.GROUPS | set(names)):
+    allowed = config.groups()
+    for gid in sorted(allowed | set(names)):
         conf = group.settings(gid)
         info = names.get(gid, {})
         rows.append(
@@ -166,7 +167,7 @@ def _group_rows() -> list[dict]:
                 "id": gid,
                 "name": info.get("name") or "(不在群列表)",
                 "members": info.get("count"),
-                "enabled": gid in config.GROUPS,
+                "enabled": gid in allowed,
                 "mode": modes.mode_of(gid),
                 "threshold": conf["threshold"],
                 "random": conf["random"],
@@ -419,7 +420,7 @@ async def debug_page(request: Request):
     return templates.TemplateResponse(
         request,
         "debug.html",
-        {"nav": "debug", "groups": sorted(config.GROUPS), "result": None, "form": {}},
+        {"nav": "debug", "groups": sorted(config.groups()), "result": None, "form": {}},
     )
 
 
@@ -433,17 +434,18 @@ async def debug_run(
     text: str = Form("在吗"),
     call_model: str = Form(""),
 ):
+    allowed = config.groups()
     call = bool(call_model)
     if kind == "private":
         result = await preview.preview_private(user_id, text, call_model=call)
     else:
-        result = await preview.preview_group(group_id or next(iter(config.GROUPS), ""), user_id, nick, text, call_model=call)
+        result = await preview.preview_group(group_id or next(iter(allowed), ""), user_id, nick, text, call_model=call)
     return templates.TemplateResponse(
         request,
         "debug.html",
         {
             "nav": "debug",
-            "groups": sorted(config.GROUPS),
+            "groups": sorted(allowed),
             "result": result,
             "form": {"kind": kind, "group_id": group_id, "user_id": user_id, "nick": nick, "text": text, "call_model": call},
         },

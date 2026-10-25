@@ -7,8 +7,10 @@
 """
 
 import asyncio
+import tempfile
 import time
 import unittest
+from pathlib import Path
 
 from app import config, group, llm, onebot, persona
 
@@ -41,6 +43,8 @@ class GroupFlowTest(unittest.TestCase):
         self._url = config.GITHUB_URL
         self._groups = config.GROUPS
         self._cooldown = config.GITHUB_BRAG_CMD_COOLDOWN
+        self._root = config.ROOT
+        self._groups_cache = dict(config._GROUPS_CACHE)
 
         async def fake_send(group_id, text, at_user=None):
             self.sent.append((group_id, text))
@@ -55,6 +59,10 @@ class GroupFlowTest(unittest.TestCase):
         config.GITHUB_URL = "https://example.com/repo"
         config.GROUPS = {"10001"}
         config.GITHUB_BRAG_CMD_COOLDOWN = 0
+        # 白名单现在走 config.groups()（热加载），要改缓存而不是 GROUPS 常量；
+        # 再把 ROOT 指到没有 .env 的临时目录，免得它去读真实配置把缓存覆盖掉
+        config._GROUPS_CACHE.update({"mtime": -1.0, "checked": 0.0, "value": {"10001"}})
+        config.ROOT = Path(tempfile.mkdtemp())
         group._states.clear()
         # 同一次测试会话共用一个 DATA_DIR，上一个用例写进日志的回复会被 state_of
         # 恢复成 last_spoke，把 subsequent 用例卡在 2 秒直呼冷却里。这里直接塞个干净的。
@@ -67,6 +75,9 @@ class GroupFlowTest(unittest.TestCase):
         config.GITHUB_URL = self._url
         config.GROUPS = self._groups
         config.GITHUB_BRAG_CMD_COOLDOWN = self._cooldown
+        config.ROOT = self._root
+        config._GROUPS_CACHE.clear()
+        config._GROUPS_CACHE.update(self._groups_cache)
         group._states.clear()
 
     def test_brag_command_ignores_exhausted_quota(self):

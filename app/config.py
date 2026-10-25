@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -75,10 +76,52 @@ STICKER_CHANCE = float(os.getenv("STICKER_CHANCE", "0.60"))
 STICKER_COOLDOWN = _int("STICKER_COOLDOWN", 120)
 
 # ---- 群聊 ----
-# 只在这些群里说话（逗号分隔的群号），留空 = 所有群都管
+# 只在这些群里说话（逗号分隔的群号）。留空 = 谁都不理，不是"所有群"。
 GROUPS = {g.strip() for g in os.getenv("GROUPS", "").split(",") if g.strip()}
 # 每群单独配置（覆盖 .env 里的默认值）
 GROUP_CONFIG_PATH = ROOT / "groups.json"
+
+
+def _dotenv_value(name: str) -> str | None:
+    """直接从 .env 里读一个键（不碰 os.environ，热加载要用）。"""
+    try:
+        text = (ROOT / ".env").read_text(encoding="utf-8")
+    except OSError:
+        return None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        if key.strip() == name:
+            return value.strip().strip('"').strip("'")
+    return None
+
+
+_GROUPS_CACHE: dict = {"mtime": -1.0, "checked": 0.0, "value": GROUPS}
+
+
+def groups() -> set[str]:
+    """当前的群白名单。
+
+    改完 .env 里的 GROUPS **不用重启**，下一条消息判断时就是新的（最多晚 1 秒）。
+    读不到文件或临时读失败就沿用上一次的结果——宁可继续管着，
+    也不能因为读配置失败突然对所有群闭嘴。
+    """
+    now = time.monotonic()
+    if now - _GROUPS_CACHE["checked"] < 1.0:  # 每条群消息都 stat 一次太浪费
+        return _GROUPS_CACHE["value"]
+    _GROUPS_CACHE["checked"] = now
+    try:
+        mtime = (ROOT / ".env").stat().st_mtime
+    except OSError:
+        return _GROUPS_CACHE["value"]
+    if mtime != _GROUPS_CACHE["mtime"]:
+        raw = _dotenv_value("GROUPS")
+        if raw is not None:
+            _GROUPS_CACHE["value"] = {g.strip() for g in raw.split(",") if g.strip()}
+        _GROUPS_CACHE["mtime"] = mtime
+    return _GROUPS_CACHE["value"]
 # 主动开口的阈值，越高越沉默
 GROUP_THRESHOLD = float(os.getenv("GROUP_THRESHOLD", "0.70"))
 # 少量主动：每条消息的随机加成概率

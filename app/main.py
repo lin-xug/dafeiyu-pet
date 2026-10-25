@@ -86,7 +86,7 @@ async def health():
         "mock_llm": config.MOCK_LLM,
         "model": config.MODEL,
         "history_turns": config.HISTORY_TURNS,
-        "groups": sorted(config.GROUPS),
+        "groups": sorted(config.groups()),
     }
 
 

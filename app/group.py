@@ -313,7 +313,8 @@ async def handle(event: dict) -> None:
     self_id = str(event.get("self_id") or "")
     if not group_id or not user_id or user_id == self_id:
         return
-    if not config.GROUPS or group_id not in config.GROUPS:
+    allowed = config.groups()  # 热加载：改 .env 的 GROUPS 不用重启
+    if not allowed or group_id not in allowed:
         return
 
     from .bot import extract  # 避免循环导入
