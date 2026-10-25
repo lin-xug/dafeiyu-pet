@@ -32,6 +32,23 @@ MAX_SEND_SIDE = 720
 CACHE_DIR = config.DATA_DIR / "cache" / "stickers"
 
 _cache: dict[str, list[Path]] | None = None
+_cache_stamp: tuple[float, float] = (-1.0, -1.0)
+
+
+def _stamp() -> tuple[float, float]:
+    """目录和 tags.json 的修改时间：变了就重建索引。
+
+    加表情、改标签都是日常操作，不该为了这个重启一次服务。
+    """
+    try:
+        index_mtime = (STICKER_DIR / INDEX_NAME).stat().st_mtime
+    except OSError:
+        index_mtime = -1.0
+    try:
+        dir_mtime = STICKER_DIR.stat().st_mtime
+    except OSError:
+        dir_mtime = -1.0
+    return (index_mtime, dir_mtime)
 
 
 def _files() -> list[Path]:
@@ -56,9 +73,10 @@ def _load_index() -> dict[str, list[str]]:
 
 
 def tags() -> dict[str, list[Path]]:
-    """标签 -> 图片列表。进程内缓存，改了 tags.json 要重启。"""
-    global _cache
-    if _cache is not None:
+    """标签 -> 图片列表。按目录和 tags.json 的 mtime 缓存，加了图不用重启。"""
+    global _cache, _cache_stamp
+    stamp = _stamp()
+    if _cache is not None and stamp == _cache_stamp:
         return _cache
 
     result: dict[str, list[Path]] = {}
@@ -80,6 +98,7 @@ def tags() -> dict[str, list[Path]]:
             bucket.append(path)
 
     _cache = result
+    _cache_stamp = stamp
     return result
 
 
@@ -147,6 +166,14 @@ def prepare(path: Path) -> Path:
 
     from PIL import Image
 
+    try:
+        with Image.open(path) as img:
+            if getattr(img, "is_animated", False):
+                # 动图压成 PNG 就只剩第一帧了，宁可原样发
+                return path
+    except Exception:  # noqa: BLE001 - 打不开就别管，让 QQ 自己判
+        return path
+
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     out = CACHE_DIR / path.name
     try:
@@ -181,23 +208,30 @@ def _sniff_ext(raw: bytes) -> str:
 def save_incoming(raw: bytes) -> Path | None:
     """把收到的一张图存进表情库（按内容去重，尽量转 PNG 保留透明）。
 
-    转换失败不再静默丢弃：先记日志，再按原格式存下来——
-    之前有张图就是在这悄悄没了（模型看到了图，表情库里却没有）。
+    动图保持原格式——转 PNG 就只剩一帧，207 帧的表情变成一张静止图。
+    转换失败不再静默丢弃：先记日志，再按原格式存下来。
     """
     digest = hashlib.md5(raw).hexdigest()
     STICKER_DIR.mkdir(parents=True, exist_ok=True)
-    out = STICKER_DIR / f"qq_{digest[:10]}.png"
-    if out.exists():
-        return None
+    ext = _sniff_ext(raw)
+    fallback = STICKER_DIR / f"qq_{digest[:10]}{ext}" if ext else None
     try:
         from PIL import Image
 
         with Image.open(io.BytesIO(raw)) as img:
+            if getattr(img, "is_animated", False) and fallback is not None:
+                if fallback.exists():
+                    return None
+                fallback.write_bytes(raw)
+                reload()
+                return fallback
+            out = STICKER_DIR / f"qq_{digest[:10]}.png"
+            if out.exists():
+                return None
             img.convert("RGBA").save(out, format="PNG", optimize=True)
         reload()
         return out
     except Exception as exc:  # noqa: BLE001 - 动图、超大图、损坏文件都可能失败
-        ext = _sniff_ext(raw)
         log.warning("表情转 PNG 失败（%s），按原格式存：%s", exc, ext or "认不出")
         # 留一份原始字节，下次再翻车能直接查是什么格式/怎么坏的
         try:
@@ -206,9 +240,8 @@ def save_incoming(raw: bytes) -> Path | None:
             (dump / f"{digest[:10]}{ext or '.bin'}").write_bytes(raw)
         except OSError:
             pass
-        if not ext:
+        if fallback is None:
             return None
-        fallback = STICKER_DIR / f"qq_{digest[:10]}{ext}"
         try:
             fallback.write_bytes(raw)
         except OSError:
