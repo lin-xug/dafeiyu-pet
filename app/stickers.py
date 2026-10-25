@@ -14,10 +14,13 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import logging
 import random
 from pathlib import Path
 
 from . import config
+
+log = logging.getLogger("dafeiyu")
 
 STICKER_DIR = config.ROOT / "杂图"
 EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
@@ -158,8 +161,25 @@ def prepare(path: Path) -> Path:
         return path
 
 
+def _sniff_ext(raw: bytes) -> str:
+    """看文件头猜扩展名。Pillow 转不了的时候至少还能按原格式存下来。"""
+    if raw[:8] == b"\x89PNG\r\n\x1a\n":
+        return ".png"
+    if raw[:2] == b"\xff\xd8":
+        return ".jpg"
+    if raw[:4] == b"RIFF" and raw[8:12] == b"WEBP":
+        return ".webp"
+    if raw[:6] in (b"GIF87a", b"GIF89a"):
+        return ".gif"
+    return ""
+
+
 def save_incoming(raw: bytes) -> Path | None:
-    """把收到的一张图存进表情库（按内容去重，统一转 PNG 保留透明）。"""
+    """把收到的一张图存进表情库（按内容去重，尽量转 PNG 保留透明）。
+
+    转换失败不再静默丢弃：先记日志，再按原格式存下来——
+    之前有张图就是在这悄悄没了（模型看到了图，表情库里却没有）。
+    """
     digest = hashlib.md5(raw).hexdigest()
     STICKER_DIR.mkdir(parents=True, exist_ok=True)
     out = STICKER_DIR / f"qq_{digest[:10]}.png"
@@ -170,7 +190,17 @@ def save_incoming(raw: bytes) -> Path | None:
 
         with Image.open(io.BytesIO(raw)) as img:
             img.convert("RGBA").save(out, format="PNG", optimize=True)
-    except Exception:  # noqa: BLE001
-        return None
-    reload()
-    return out
+        reload()
+        return out
+    except Exception as exc:  # noqa: BLE001 - 动图、超大图、损坏文件都可能失败
+        ext = _sniff_ext(raw)
+        log.warning("表情转 PNG 失败（%s），按原格式存：%s", exc, ext or "认不出")
+        if not ext:
+            return None
+        fallback = STICKER_DIR / f"qq_{digest[:10]}{ext}"
+        try:
+            fallback.write_bytes(raw)
+        except OSError:
+            return None
+        reload()
+        return fallback
