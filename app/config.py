@@ -122,6 +122,41 @@ def groups() -> set[str]:
             _GROUPS_CACHE["value"] = {g.strip() for g in raw.split(",") if g.strip()}
         _GROUPS_CACHE["mtime"] = mtime
     return _GROUPS_CACHE["value"]
+
+
+def set_groups(gids: set[str]) -> bool:
+    """把群白名单写回 .env（其它行原样保留），写完立刻生效。
+
+    后台的「白名单」开关走这里。只改 GROUPS= 那一行，不碰别的配置，
+    也不碰 os.environ——反正 groups() 每次都读文件。
+    """
+    path = ROOT / ".env"
+    value = ",".join(sorted(gids))
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    except OSError:
+        return False
+
+    out, done = [], False
+    for line in lines:
+        if line.strip().startswith("GROUPS="):
+            out.append(f"GROUPS={value}")
+            done = True
+        else:
+            out.append(line)
+    if not done:
+        if out and out[-1].strip():
+            out.append("")
+        out.append(f"GROUPS={value}")
+    try:
+        path.write_text("\n".join(out) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+
+    _GROUPS_CACHE["value"] = set(gids)
+    _GROUPS_CACHE["mtime"] = -1.0
+    _GROUPS_CACHE["checked"] = 0.0
+    return True
 # 主动开口的阈值，越高越沉默
 GROUP_THRESHOLD = float(os.getenv("GROUP_THRESHOLD", "0.70"))
 # 少量主动：每条消息的随机加成概率

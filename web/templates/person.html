@@ -8,7 +8,11 @@
 {% if nick and name != nick %}<p class="hint">群里最近叫「{{ nick }}」（每 30 秒刷新一次）</p>{% endif %}
 <p><a href="/admin/people">← 返回列表</a></p>
 
-{% if ok %}<div class="toast">✓ 备注已保存</div>{% endif %}
+{% if ok == 'alias' %}<div class="toast">✓ 备注已保存</div>
+{% elif ok == 'summary' %}<div class="toast">✓ 私聊摘要已保存，下一句话就用新的</div>
+{% elif ok == 'facts' %}<div class="toast">✓ 事实库已更新</div>
+{% elif ok == 'memory' %}<div class="toast">✓ 群印象已保存</div>
+{% elif ok == 'history' %}<div class="toast">✓ 最近私聊已清空</div>{% endif %}
 
 <form class="toolbar" method="post" action="/admin/people/{{ qq }}/alias">
   <input name="name" value="{{ alias }}" placeholder="备注：起个你一眼认得出的名字" maxlength="32" class="grow">
@@ -41,23 +45,62 @@
 
 <h2>事实库</h2>
 <div class="card">
+  <p class="hint">一条条具体信息（养了只猫、在哪上学）。每次说话都会挑几条塞进提示词，「临时」的那类会自己过期。</p>
   {% if facts %}
-  <table><tr><th>内容</th><th>类型</th><th>过期</th></tr>
-  {% for f in facts %}
-    <tr><td>{{ f.text }}</td><td><span class="badge">{{ f.kind }}</span></td>
-    <td class="dim">{{ '永久' if not f.expire else f.expire }}</td></tr>
-  {% endfor %}</table>
+  <table>
+    <tr><th>内容</th><th>类型</th><th>过期</th><th></th></tr>
+    {% for f in facts %}
+    <tr>
+      <td>
+        <form method="post" action="/admin/people/{{ qq }}/facts" class="row" style="gap:6px">
+          <input type="hidden" name="action" value="edit">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <input name="text" value="{{ f.text }}" style="flex:1;min-width:220px">
+          <button>改</button>
+        </form>
+      </td>
+      <td><span class="badge {{ 'warn' if f.kind == '临时' }}">{{ f.kind }}</span></td>
+      <td class="dim small">{{ '永久' if not f.expire else f.expire }}</td>
+      <td>
+        <form method="post" action="/admin/people/{{ qq }}/facts">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <button class="mini">删</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
   {% else %}<div class="dim">还没有</div>{% endif %}
+
+  <form method="post" action="/admin/people/{{ qq }}/facts" class="row" style="margin-top:12px">
+    <input type="hidden" name="action" value="add">
+    <select name="kind"><option>长期</option><option>临时</option><option>事</option></select>
+    <input name="text" placeholder="新事实，比如「养了只猫叫豆豆」" style="flex:1" maxlength="120">
+    <button class="primary">添加</button>
+  </form>
 </div>
 
 <h2>记忆</h2>
 <div class="grid g2">
   <div class="card">
-    <div class="k">私聊摘要</div>
-    <pre>{{ summary or '（没有摘要）' }}</pre>
+    <div class="k">私聊摘要（可以改）</div>
+    <form method="post" action="/admin/people/{{ qq }}/summary">
+      <textarea name="text" style="margin-top:8px;min-height:150px">{{ summary }}</textarea>
+      <p style="margin:8px 0 0"><button class="primary">保存摘要</button></p>
+    </form>
   </div>
   <div class="card">
-    <div class="k">最近私聊</div>
+    <div class="row" style="justify-content:space-between">
+      <div class="k">最近私聊</div>
+      {% if hist %}
+      <form method="post" action="/admin/people/{{ qq }}/history" style="margin:0"
+            onsubmit="return confirm('清空最近这 {{ hist|length }} 条私聊记录？摘要和事实库不受影响。')">
+        <input type="hidden" name="action" value="clear">
+        <button class="mini">清空</button>
+      </form>
+      {% endif %}
+    </div>
     <pre>{% for m in hist %}{{ '他' if m.role=='user' else '她' }}：{{ m.content }}
 {% else %}（没有记录）{% endfor %}</pre>
   </div>
@@ -66,8 +109,15 @@
 <h2>群里的印象</h2>
 {% for g in group_mem %}
 <div class="card mb">
-  <div class="k">群 {{ g.gid }}{% if g.nick %} · {{ g.nick }}{% endif %}</div>
-  <pre>{{ g.summary or (g.recent|join(' / ')) or '（没有）' }}</pre>
+  <div class="row" style="justify-content:space-between">
+    <div class="k">群 {{ g.gid }}{% if g.nick %} · {{ g.nick }}{% endif %}</div>
+    <span class="dim small">最近原话：{{ g.recent|join(' / ') or '无' }}</span>
+  </div>
+  <form method="post" action="/admin/people/{{ qq }}/group_summary">
+    <input type="hidden" name="gid" value="{{ g.gid }}">
+    <textarea name="text" style="margin-top:6px;min-height:80px">{{ g.summary }}</textarea>
+    <p style="margin:6px 0 0"><button class="mini">保存这个群的印象</button></p>
+  </form>
 </div>
 {% else %}<div class="dim">没有群记录</div>{% endfor %}
 {% endblock %}

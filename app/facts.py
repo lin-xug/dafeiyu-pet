@@ -82,6 +82,26 @@ def add(user_id: str, text: str, kind: str, source: str = "") -> bool:
     return True
 
 
+def remove(user_id: str, index: int) -> bool:
+    """按位置删一条（后台管理用）。位置越界返回 False。"""
+    rows = load(user_id)
+    if not (0 <= index < len(rows)):
+        return False
+    rows.pop(index)
+    _save(user_id, rows)
+    return True
+
+
+def edit(user_id: str, index: int, text: str) -> bool:
+    rows = load(user_id)
+    text = text.strip().strip("。.")
+    if not text or not (0 <= index < len(rows)):
+        return False
+    rows[index]["text"] = text
+    _save(user_id, rows)
+    return True
+
+
 def active(user_id: str, limit: int | None = None) -> list[str]:
     """没过期的、最近的几条。"""
     now = time.time()

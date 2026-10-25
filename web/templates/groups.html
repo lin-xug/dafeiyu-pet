@@ -1,13 +1,33 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>群管理</h1>
-<p class="hint">这里改的是 groups.json；超活跃模式会覆盖随机率和冷却。</p>
-<table>
+{% if ok == 'whitelist' %}<div class="toast">✓ 白名单已更新，立刻生效（不用重启）</div>{% endif %}
+<p class="hint">「白名单」= 它能不能在这个群工作。点一下开关即可，写回 .env。这里改的参数存在 groups.json。</p>
+
+<div class="toolbar">
+  <span class="dim small">白名单 <strong class="fg">{{ enabled_count }}</strong> / {{ total }}</span>
+  <form method="post" action="/admin/groups/whitelist/all" style="display:inline">
+    <input type="hidden" name="mode" value="on">
+    <button class="mini">全部开启</button>
+  </form>
+  <form method="post" action="/admin/groups/whitelist/all" style="display:inline"
+        onsubmit="return confirm('把所有群都从白名单里关掉？关了它一句话都不说。')">
+    <input type="hidden" name="mode" value="off">
+    <button class="mini">全部关闭</button>
+  </form>
+</div>
+
+<table class="list">
   <tr><th>群</th><th>白名单</th><th>模式</th><th>阈值</th><th>随机</th><th>冷却</th><th>时/日</th><th></th></tr>
   {% for g in groups %}
   <tr>
-    <td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a><div class="dim">{{ g.id }}{% if g.members %} · {{ g.members }} 人{% endif %}</div></td>
-    <td>{% if g.enabled %}<span class="badge ok">在</span>{% else %}<span class="badge">不在</span>{% endif %}</td>
+    <td><a href="/admin/groups/{{ g.id }}">{{ g.name }}</a><div class="dim small mono">{{ g.id }}{% if g.members %} · {{ g.members }} 人{% endif %}</div></td>
+    <td>
+      <form method="post" action="/admin/groups/{{ g.id }}/whitelist">
+        <input type="hidden" name="back" value="list">
+        <button class="mini {{ 'on' if g.enabled else '' }}" title="{{ '点一下移出白名单' if g.enabled else '点一下加入白名单' }}">{{ '在' if g.enabled else '不在' }}</button>
+      </form>
+    </td>
     <td>
       {% if g.mode == 'hyper' %}<span class="badge warn">超活跃</span>
       {% elif g.mode == 'silent' %}<span class="badge bad">关闭</span>

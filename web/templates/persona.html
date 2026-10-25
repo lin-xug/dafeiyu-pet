@@ -3,6 +3,9 @@
 <h1>人格与提示词</h1>
 <p class="hint">文本存在 {{ dir }}。保存前会自动留一份历史（每个文件保留最近 20 版）。改完去<a href="/admin/debug">调试台</a>试跑。</p>
 
+{% if ok == 'kb' %}<div class="toast">✓ 知识库已保存</div>
+{% elif ok == 'kb-bad' %}<div class="toast bad">✗ 文件名只能用中文、字母、数字、下划线、短横线</div>{% endif %}
+
 {% for s in sections %}
 <div class="card" style="margin-bottom:14px">
   <div class="row" style="justify-content:space-between">
@@ -16,8 +19,36 @@
 </div>
 {% endfor %}
 
-<h2>知识库</h2>
+<h2>知识库（群背景资料）</h2>
+<p class="hint">给某个群单独垫的背景。在群详情页的「知识库名」填文件名（不带 .md）就会挂上。存在 {{ kb_dir }}。</p>
+
+{% for b in kb_blocks %}
+<div class="card" style="margin-bottom:14px">
+  <div class="row" style="justify-content:space-between">
+    <strong>{{ b.name }}</strong>
+    <span class="dim">{{ b.chars }} 字</span>
+  </div>
+  <form method="post" action="/admin/kb/{{ b.stem }}">
+    <textarea name="text" style="margin-top:8px;min-height:220px">{{ b.text }}</textarea>
+    <p style="margin:8px 0 0"><button class="primary">保存 {{ b.name }}</button></p>
+  </form>
+  <form method="post" action="/admin/kb" style="margin-top:6px"
+        onsubmit="return confirm('删掉 {{ b.name }}？挂了它的群会失去这段背景。')">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="name" value="{{ b.stem }}">
+    <button class="mini">删除这个文件</button>
+  </form>
+</div>
+{% else %}
+<div class="dim">还没有知识库文件</div>
+{% endfor %}
+
 <div class="card">
-  <p class="dim">挂在群上的背景资料（groups.json 里配 kb 名）。当前文件：{{ kb_files|join('、') or '无' }}</p>
+  <div class="k">新建一份</div>
+  <form method="post" action="/admin/kb" class="row" style="margin-top:8px">
+    <input type="hidden" name="action" value="create">
+    <input name="name" placeholder="文件名（不用加 .md）" class="grow" maxlength="40">
+    <button class="primary">新建</button>
+  </form>
 </div>
 {% endblock %}

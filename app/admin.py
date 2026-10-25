@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -53,6 +54,17 @@ def _napcat() -> dict:
         return {"ok": bool(data), "uin": data.get("user_id"), "nick": data.get("nickname")}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "error": type(exc).__name__}
+
+
+def _napcat_groups() -> list[str]:
+    """机器人当前在的全部群。拿不到就返回空，调用方自己兜底。"""
+    try:
+        headers = {"Authorization": f"Bearer {config.ONEBOT_TOKEN}"} if config.ONEBOT_TOKEN else {}
+        with httpx.Client(timeout=4) as c:
+            r = c.get(f"{config.ONEBOT_URL}/get_group_list", headers=headers)
+        return [str(g.get("group_id")) for g in (r.json().get("data") or []) if g.get("group_id")]
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def _model_ping() -> dict:
@@ -125,7 +137,11 @@ async def dashboard(request: Request):
             "nav": "dashboard",
             "napcat": _napcat(),
             "model": _model_ping(),
-            "health": {"model": config.MODEL, "groups": len(config.groups())},
+            "health": {
+                "model": config.MODEL,
+                "groups": len(config.groups()),
+                "groups_total": len(groups_info),
+            },
             "stats": _today_stats(log_text),
             "events": _recent_events(log_text),
             "groups": groups_info,
@@ -180,14 +196,23 @@ def _group_rows() -> list[dict]:
 
 
 @router.get("/groups", response_class=HTMLResponse)
-async def groups_page(request: Request):
+async def groups_page(request: Request, ok: str = ""):
+    rows = _group_rows()
     return templates.TemplateResponse(
-        request, "groups.html", {"nav": "groups", "groups": _group_rows()}
+        request,
+        "groups.html",
+        {
+            "nav": "groups",
+            "groups": rows,
+            "ok": ok,
+            "enabled_count": sum(1 for r in rows if r["enabled"]),
+            "total": len(rows),
+        },
     )
 
 
 @router.get("/groups/{gid}", response_class=HTMLResponse)
-async def group_detail(request: Request, gid: str):
+async def group_detail(request: Request, gid: str, ok: str = ""):
     conf = group.settings(gid)
     items = playbook.active(gid)
     log_path = config.GROUP_LOG_DIR / f"{gid}.jsonl"
@@ -215,6 +240,9 @@ async def group_detail(request: Request, gid: str):
             "nav": "groups",
             "gid": gid,
             "conf": conf,
+            "ok": ok,
+            "enabled": gid in config.groups(),
+            "group_summary": gmemory.group_summary(gid),
             "mode": modes.mode_of(gid),
             "items": items,
             "tail": tail,
@@ -291,8 +319,37 @@ async def playbook_action(
     return RedirectResponse(f"/admin/groups/{gid}", status_code=303)
 
 
-# ---------------- 人 ----------------
+@router.post("/groups/{gid}/whitelist")
+async def toggle_whitelist(gid: str, back: str = Form("list")):
+    """开关这个群的白名单：写回 .env，下一次判断就是新的（不用重启）。"""
+    allowed = set(config.groups())
+    if gid in allowed:
+        allowed.discard(gid)
+    else:
+        allowed.add(gid)
+    config.set_groups(allowed)
+    target = f"/admin/groups/{gid}" if back == "detail" else "/admin/groups"
+    return RedirectResponse(f"{target}?ok=whitelist", status_code=303)
 
+
+@router.post("/groups/whitelist/all")
+async def whitelist_all(mode: str = Form("on")):
+    """一键全开 / 全关。全开拿 NapCat 的群列表当全集。"""
+    if mode == "off":
+        config.set_groups(set())
+    else:
+        config.set_groups(set(_napcat_groups()) or set(config.groups()))
+    return RedirectResponse("/admin/groups?ok=whitelist", status_code=303)
+
+
+@router.post("/groups/{gid}/summary")
+async def save_group_summary(gid: str, text: str = Form("")):
+    """手改「这段时间群里发生了什么」。改完自动整理时照常接着写。"""
+    gmemory.save_group_summary(gid, text)
+    return RedirectResponse(f"/admin/groups/{gid}?ok=summary", status_code=303)
+
+
+# ---------------- 人 ----------------
 
 def _people_rows() -> list[dict]:
     marked = aliases.names()
@@ -412,6 +469,102 @@ async def affinity_action(
     return RedirectResponse(f"/admin/people/{qq}", status_code=303)
 
 
+# ---------------- 记忆（后台上手改） ----------------
+
+
+@router.post("/people/{qq}/summary")
+async def save_person_summary(qq: str, text: str = Form("")):
+    """私聊摘要是塞进提示词的那段"我印象里的他"，手改立刻生效。"""
+    memory.save_summary(qq, text)
+    return RedirectResponse(f"/admin/people/{qq}?ok=summary", status_code=303)
+
+
+@router.post("/people/{qq}/facts")
+async def facts_action(
+    qq: str,
+    action: str = Form(...),
+    text: str = Form(""),
+    kind: str = Form("事"),
+    index: int = Form(-1),
+):
+    if action == "add" and text.strip():
+        facts.add(qq, text, kind, source="admin")
+    elif action == "edit":
+        facts.edit(qq, index, text)
+    elif action == "delete":
+        facts.remove(qq, index)
+    return RedirectResponse(f"/admin/people/{qq}?ok=facts", status_code=303)
+
+
+@router.post("/people/{qq}/group_summary")
+async def save_group_impression(qq: str, gid: str = Form(...), text: str = Form("")):
+    """某个群里"我对这个人的印象"。保留原话不动，只换摘要。"""
+    keep = gmemory._read(gid, qq).get("messages", [])
+    gmemory.save_summary(gid, qq, text, keep)
+    return RedirectResponse(f"/admin/people/{qq}?ok=memory", status_code=303)
+
+
+@router.post("/people/{qq}/history")
+async def history_action(qq: str, action: str = Form(...)):
+    if action == "clear":
+        memory.replace(qq, [])
+    return RedirectResponse(f"/admin/people/{qq}?ok=history", status_code=303)
+
+
+# ---------------- 记忆总览 ----------------
+
+
+@router.get("/memory", response_class=HTMLResponse)
+async def memory_page(request: Request):
+    """把所有群记忆、人物记忆摊在一页上，点进去就能改。"""
+    names = {r["id"]: r for r in _group_rows()}
+
+    groups = []
+    for gid in sorted(config.groups(), key=lambda g: names.get(g, {}).get("members") or 0, reverse=True):
+        data = gmemory.load_group(gid)
+        row = names.get(gid, {})
+        groups.append(
+            {
+                "gid": gid,
+                "name": row.get("name") or "(不在群列表)",
+                "members": row.get("members"),
+                "summary": (data.get("summary") or "").strip(),
+                "updated": _fmt_ts(data.get("updated_at")),
+                "items": len(playbook.load(gid)["items"]),
+            }
+        )
+
+    nicks = aliases.nick_map()
+    people = []
+    for path in config.AFFINITY_DIR.glob("*.json"):
+        qq = path.stem
+        summary = memory.load_summary(qq)
+        n_facts = len(facts.load(qq))
+        if not summary and not n_facts:
+            continue
+        people.append(
+            {
+                "qq": qq,
+                "name": aliases.get(qq) or nicks.get(qq) or qq,
+                "summary": summary,
+                "facts": n_facts,
+                "exp": affinity.Affinity.load(qq).exp,
+            }
+        )
+    people.sort(key=lambda r: (-r["facts"], -r["exp"], r["name"]))
+
+    return templates.TemplateResponse(
+        request,
+        "memory.html",
+        {
+            "nav": "memory",
+            "groups": groups,
+            "people": people,
+            "total_facts": sum(p["facts"] for p in people),
+        },
+    )
+
+
 # ---------------- 调试台 ----------------
 
 
@@ -461,7 +614,18 @@ PERSONA_LABELS = {
     "output": "输出格式",
     "group_rules": "群聊规则",
     "private_rules": "私聊规则",
+    "github": "GitHub 人设",
 }
+
+_KB_NAME_RE = re.compile(r"^[A-Za-z0-9_\u4e00-\u9fff-]{1,40}$")
+
+
+def _safe_kb_name(name: str) -> str:
+    """知识库文件名：只要一段名字，不许带路径，防目录穿越。"""
+    stem = Path(name.strip()).stem
+    if not _KB_NAME_RE.match(stem):
+        return ""
+    return f"{stem}.md"
 
 
 def _snapshot(name: str, text: str) -> None:
@@ -475,17 +639,55 @@ def _snapshot(name: str, text: str) -> None:
 
 
 @router.get("/persona", response_class=HTMLResponse)
-async def persona_page(request: Request):
+async def persona_page(request: Request, ok: str = ""):
     sections = [
         {"key": key, "label": label, "text": persona.get(key), "chars": len(persona.get(key))}
         for key, label in PERSONA_LABELS.items()
     ]
-    kb_files = sorted(p.name for p in config.KB_DIR.glob("*.md")) if config.KB_DIR.exists() else []
+    blocks = []
+    for path in sorted(config.KB_DIR.glob("*.md")) if config.KB_DIR.exists() else []:
+        try:
+            text = path.read_text("utf-8")
+        except OSError:
+            continue
+        blocks.append({"name": path.name, "stem": path.stem, "text": text, "chars": len(text)})
     return templates.TemplateResponse(
         request,
         "persona.html",
-        {"nav": "persona", "sections": sections, "dir": str(persona.PERSONA_DIR), "kb_files": kb_files},
+        {
+            "nav": "persona",
+            "sections": sections,
+            "dir": str(persona.PERSONA_DIR),
+            "kb_blocks": blocks,
+            "kb_dir": str(config.KB_DIR),
+            "ok": ok,
+        },
     )
+
+
+@router.post("/kb/{name}")
+async def save_kb(name: str, text: str = Form("")):
+    safe = _safe_kb_name(name)
+    if not safe:
+        return RedirectResponse("/admin/persona?ok=kb-bad", status_code=303)
+    config.KB_DIR.mkdir(parents=True, exist_ok=True)
+    (config.KB_DIR / safe).write_text(text.rstrip() + "\n", "utf-8")
+    return RedirectResponse("/admin/persona?ok=kb", status_code=303)
+
+
+@router.post("/kb")
+async def kb_action(action: str = Form(...), name: str = Form(""), text: str = Form("")):
+    safe = _safe_kb_name(name)
+    if not safe:
+        return RedirectResponse("/admin/persona?ok=kb-bad", status_code=303)
+    path = config.KB_DIR / safe
+    if action == "create":
+        config.KB_DIR.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text(text.rstrip() + "\n" if text.strip() else "", "utf-8")
+    elif action == "delete":
+        path.unlink(missing_ok=True)
+    return RedirectResponse("/admin/persona?ok=kb", status_code=303)
 
 
 @router.post("/persona/{name}")

@@ -134,3 +134,18 @@ def load_group(group_id: str) -> dict:
 
 def group_summary(group_id: str) -> str:
     return load_group(group_id).get("summary", "")
+
+
+def save_group_summary(group_id: str, text: str) -> None:
+    """后台手改群记忆摘要。
+
+    不重置 msg_count，也不动个人记忆——下次自动整理时照常接着往后写。
+    """
+    path = _group_path(group_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = load_group(group_id)
+    data["summary"] = text.strip()[:6000]
+    data["updated_at"] = time.time()
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+    tmp.replace(path)

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>记忆</h1>
+<p class="hint">它记得什么、忘了什么，这里一眼能看到；点进去就能直接改。</p>
+
+<h2 class="first">群记忆（{{ groups|length }} 个）</h2>
+<div class="card">
+  {% for g in groups %}
+  <div class="mem-row">
+    <div class="who"><a href="/admin/groups/{{ g.gid }}">{{ g.name }}</a>
+      <div class="dim small mono">{{ g.gid }}{% if g.members %} · {{ g.members }} 人{% endif %}</div>
+    </div>
+    <div class="txt">{{ g.summary[:90] if g.summary else '（还没总结过）' }}</div>
+    <div class="dim small nowrap">{{ g.items }} 条手册 · {{ g.updated }}</div>
+  </div>
+  {% else %}
+  <div class="dim">白名单里还没有群</div>
+  {% endfor %}
+</div>
+
+<h2>人物记忆（{{ people|length }} 人 · {{ total_facts }} 条事实）</h2>
+<div class="card">
+  {% for p in people %}
+  <div class="mem-row">
+    <div class="who"><a href="/admin/people/{{ p.qq }}">{{ p.name }}</a>
+      <div class="dim small mono">{{ p.qq }}</div>
+    </div>
+    <div class="txt">{{ p.summary[:80] if p.summary else '（没有摘要）' }}</div>
+    <div class="dim small nowrap">{{ p.facts }} 条事实</div>
+  </div>
+  {% else %}
+  <div class="dim">还没有攒下记忆</div>
+  {% endfor %}
+</div>
+
+<p class="hint">想清空某人最近聊天记录、或重写他的私聊摘要 → 点进那个人。想改群的整体印象 → 点进那个群。</p>
+{% endblock %}
