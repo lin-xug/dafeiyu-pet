@@ -39,63 +39,80 @@ class ModesTest(unittest.TestCase):
     def tearDown(self):
         modes.set_mode("unit-gid", "normal")
 
+    def _cmd(self, text, gid):
+        """模拟有权限的人（主人 / 群主 / 管理员）下命令。"""
+        return modes.handle_command(text, gid, allowed=True)
+
+    def test_member_cannot_switch(self):
+        """普通群员喊「闭嘴」不该生效，返回 None 交给模型按规则顶回去。"""
+        self.assertIsNone(modes.handle_command("关闭模式", "unit-gid", allowed=False))
+        self.assertFalse(modes.is_silent("unit-gid"))
+
+    def test_member_cannot_go_hyper(self):
+        self.assertIsNone(modes.handle_command("超活跃 10", "unit-gid", allowed=False))
+        self.assertFalse(modes.is_hyper("unit-gid"))
+
+    def test_member_can_still_query(self):
+        """查模式不算操作，谁问都答。"""
+        self.assertIn("模式", modes.handle_command("当前模式", "unit-gid", allowed=False))
+
     def test_rate(self):
-        self.assertIn("10%", modes.handle_command("超活跃 10", "unit-gid"))
+        self.assertIn("10%", self._cmd("超活跃 10", "unit-gid"))
         self.assertEqual(modes.random_of("unit-gid"), 0.1)
 
     def test_two_numbers(self):
-        modes.handle_command("超活跃 10 50", "unit-gid")
+        self._cmd("超活跃 10 50", "unit-gid")
         self.assertEqual(modes.random_of("unit-gid"), 0.1)
         self.assertAlmostEqual(modes.mention_of("unit-gid"), 0.5)
 
     def test_group_targeted(self):
-        msg = modes.handle_command("普通模式 123456789", None)
+        msg = self._cmd("普通模式 123456789", None)
         self.assertIn("123456789", msg)
         self.assertEqual(modes.mode_of("123456789"), "normal")
 
     def test_unknown(self):
-        self.assertIsNone(modes.handle_command("今天天气不错", "unit-gid"))
+        self.assertIsNone(self._cmd("今天天气不错", "unit-gid"))
 
     def test_silent_and_wake(self):
-        msg = modes.handle_command("关闭模式", "unit-gid")
+        msg = self._cmd("关闭模式", "unit-gid")
         self.assertIn("闭嘴", msg)
         self.assertTrue(modes.is_silent("unit-gid"))
 
         # 静音时查模式要能看出是关闭模式
-        self.assertIn("关闭模式", modes.handle_command("当前模式", "unit-gid"))
+        self.assertIn("关闭模式", self._cmd("当前模式", "unit-gid"))
 
-        msg = modes.handle_command("打开模式", "unit-gid")
+        msg = self._cmd("打开模式", "unit-gid")
         self.assertIn("普通模式", msg)
         self.assertFalse(modes.is_silent("unit-gid"))
 
     def test_silent_by_group_number(self):
-        modes.handle_command("关闭模式 555555", None)
+        self._cmd("关闭模式 555555", None)
         self.assertTrue(modes.is_silent("555555"))
-        modes.handle_command("打开模式 555555", None)
+        self._cmd("打开模式 555555", None)
         self.assertFalse(modes.is_silent("555555"))
 
     def test_silent_not_counted_as_hyper(self):
-        modes.handle_command("关闭模式", "unit-gid")
+        self._cmd("关闭模式", "unit-gid")
         self.assertFalse(modes.is_hyper("unit-gid"))
 
     def test_three_modes_are_peers(self):
         """关闭 / 超活跃 / 普通 三者同级，任意两个都能直接互切。"""
-        modes.handle_command("闭嘴", "unit-gid")
+        self._cmd("闭嘴", "unit-gid")
         self.assertTrue(modes.is_silent("unit-gid"))
 
-        modes.handle_command("超活跃 10", "unit-gid")
+        self._cmd("超活跃 10", "unit-gid")
         self.assertTrue(modes.is_hyper("unit-gid"))
         self.assertFalse(modes.is_silent("unit-gid"))
 
-        modes.handle_command("闭嘴", "unit-gid")
+        self._cmd("闭嘴", "unit-gid")
         self.assertTrue(modes.is_silent("unit-gid"))
         self.assertFalse(modes.is_hyper("unit-gid"))
 
-        modes.handle_command("普通模式", "unit-gid")
+        self._cmd("普通模式", "unit-gid")
         self.assertEqual(modes.mode_of("unit-gid"), "normal")
 
     def test_shut_up_with_group_number(self):
-        msg = modes.handle_command("闭嘴 666666", None)
+        msg = self._cmd("闭嘴 666666", None)
         self.assertIn("666666", msg)
         self.assertTrue(modes.is_silent("666666"))
         modes.set_mode("666666", "normal")

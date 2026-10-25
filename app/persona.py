@@ -15,6 +15,7 @@ from .persona_defaults import (
     OUTPUT,
     PERSONA,
     PRIVATE_RULES,
+    RULES,
     STYLE,
 )
 
@@ -28,6 +29,7 @@ FILES = {
     "output": ("output.md", OUTPUT),
     "group_rules": ("group_rules.md", GROUP_RULES),
     "private_rules": ("private_rules.md", PRIVATE_RULES),
+    "rules": ("rules.md", RULES),
     "github": ("github.md", GITHUB),
 }
 
@@ -115,7 +117,7 @@ def relation_hint(user_id: str) -> str:
 
 
 def build_system_prompt(extra: str = "", sticker_tags: list[str] | None = None) -> str:
-    parts = [get("persona"), get("examples"), get("style"), get("output")]
+    parts = [get("persona"), get("examples"), get("style"), get("output"), get("rules")]
     if sticker_tags:
         parts.append(STICKER.format(tags="、".join(sticker_tags)))
     extra = extra.strip()

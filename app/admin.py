@@ -650,6 +650,7 @@ PERSONA_LABELS = {
     "output": "输出格式",
     "group_rules": "群聊规则",
     "private_rules": "私聊规则",
+    "rules": "规则",
     "github": "GitHub 人设",
 }
 

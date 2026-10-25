@@ -33,23 +33,24 @@ MAX_SEND_SIDE = 720
 CACHE_DIR = config.DATA_DIR / "cache" / "stickers"
 
 _cache: dict[str, list[Path]] | None = None
-_cache_stamp: tuple[float, float] = (-1.0, -1.0)
+_cache_stamp: tuple[int, int] = (-1, -1)
 
 
-def _stamp() -> tuple[float, float]:
-    """目录和 tags.json 的修改时间：变了就重建索引。
+def _stamp() -> tuple[int, int]:
+    """目录和 tags.json 的修改时间（纳秒）：变了就重建索引。
 
     加表情、改标签都是日常操作，不该为了这个重启一次服务。
+    用 mtime_ns 而不是 mtime——同一秒内连着加两张图，秒级精度看不出区别。
     """
     try:
-        index_mtime = (STICKER_DIR / INDEX_NAME).stat().st_mtime
+        index_ns = (STICKER_DIR / INDEX_NAME).stat().st_mtime_ns
     except OSError:
-        index_mtime = -1.0
+        index_ns = -1
     try:
-        dir_mtime = STICKER_DIR.stat().st_mtime
+        dir_ns = STICKER_DIR.stat().st_mtime_ns
     except OSError:
-        dir_mtime = -1.0
-    return (index_mtime, dir_mtime)
+        dir_ns = -1
+    return (index_ns, dir_ns)
 
 
 def _files() -> list[Path]:

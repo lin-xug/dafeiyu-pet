@@ -127,11 +127,16 @@ def _split_gid(raw: str) -> tuple[str, str | None]:
     return raw.replace(" ", ""), None
 
 
-def handle_command(text: str, group_id: str | None) -> str | None:
+def handle_command(text: str, group_id: str | None, *, allowed: bool = False) -> str | None:
     """在群里直接说命令就能切模式。返回要给用户看的话，None 表示不是命令。
 
     三种模式**同级**：关闭 / 普通 / 超活跃，互相都能直接切，不用先回普通模式。
     每个命令都支持带群号（私聊里远程操作某个群）。
+
+    `allowed` 是「这个人有没有资格切」——主人、群主、管理员才给 True。
+    没资格时返回 None，当成普通聊天交给模型：它知道该顶回去（规则里写了），
+    比代码替它说一句生硬的拒绝更像人。
+    查询模式不需要资格。
     """
     raw = text.strip()
     word = raw.replace(" ", "")
@@ -145,6 +150,8 @@ def handle_command(text: str, group_id: str | None) -> str | None:
         (OFF_WORDS, "normal", "收，切回普通模式。"),
     ):
         if body in words or word in words:
+            if not allowed:
+                return None
             if not gid:
                 return f"这个得在群里说，或者带上群号：{words[0]} 123456789"
             set_mode(gid, mode)
@@ -155,6 +162,8 @@ def handle_command(text: str, group_id: str | None) -> str | None:
     # ---- 超活跃：可以带随机率 / 提及率 ----
     match = ON_RE.match(raw.replace(" ", " ").strip()) or ON_RE.match(word)
     if match:
+        if not allowed:
+            return None
         if not gid:
             return "这个得在群里说，或者带上群号：超活跃 123456789 10"
         first, second = match.group(1), match.group(2)
@@ -182,6 +191,8 @@ def handle_command(text: str, group_id: str | None) -> str | None:
 
     # ---- 只写「超活跃」两个字 ----
     if word in ON_WORDS:
+        if not allowed:
+            return None
         if not gid:
             return "这个得在群里说，或者带上群号：超活跃 123456789"
         set_mode(gid, "hyper")
