@@ -5,7 +5,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import logging.handlers
+import os
+import signal
 from collections import defaultdict
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -44,6 +47,59 @@ async def _process(event: dict) -> None:
             log.exception("处理消息时出错")
 
 
+def _code_stamp() -> float:
+    """app/ 下所有 .py 里最新的修改时间。"""
+    latest = 0.0
+    for path in Path(__file__).resolve().parent.glob("*.py"):
+        try:
+            latest = max(latest, path.stat().st_mtime)
+        except OSError:
+            continue
+    return latest
+
+
+def _syntax_ok() -> bool:
+    """改坏了就别重启——宁可先跑着旧代码，也不能把自己弄挂。"""
+    import py_compile
+
+    for path in Path(__file__).resolve().parent.glob("*.py"):
+        try:
+            py_compile.compile(str(path), doraise=True)
+        except py_compile.PyCompileError as exc:
+            log.error("代码有语法错误，暂不重启：%s", exc)
+            return False
+        except OSError:
+            continue
+    return True
+
+
+async def _watch_code() -> None:
+    """代码一改就让进程退出，交给 systemd 拉起来。
+
+    run.py 没开 uvicorn 的 reload，改完不重启会一直跑旧代码。
+    今天连着几次「修好了却没生效」都是这个原因，索性让它自己重启。
+    """
+    if not config.AUTO_RELOAD:
+        return
+    baseline = _code_stamp()
+    while True:
+        await asyncio.sleep(max(3, config.AUTO_RELOAD_INTERVAL))
+        latest = _code_stamp()
+        if latest == baseline:
+            continue
+        if not _syntax_ok():
+            baseline = latest  # 记下来，别每 10 秒刷同一条错误
+            continue
+        log.warning("检测到代码改动，退出进程让 systemd 重新加载（AUTO_RELOAD=0 可关）")
+        try:
+            affinity.flush_all()
+            gmemory.flush_all()
+        except Exception:  # noqa: BLE001
+            log.exception("重启前落盘失败")
+        os.kill(os.getpid(), signal.SIGTERM)
+        return
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     persona.init()
@@ -59,6 +115,7 @@ async def _startup() -> None:
     tasks.spawn(affinity.flush_loop(), name="flush")
     tasks.spawn(gmemory_flush_loop(), name="gflush")
     tasks.spawn(backup.daily_loop(), name="backup")
+    tasks.spawn(_watch_code(), name="watch-code")
 
 
 async def gmemory_flush_loop(interval: float = 10.0) -> None:

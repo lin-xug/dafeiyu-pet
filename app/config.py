@@ -66,6 +66,11 @@ PORT = _int("PORT", 8000)
 DRY_RUN = _bool("DRY_RUN", False)
 # 不调模型，返回假的回复（测试整条链路用）
 MOCK_LLM = _bool("MOCK_LLM", False)
+# 改了 app/*.py 自动退出，让 systemd 拉起来加载新代码。
+# run.py 没开 uvicorn 的 reload，不开这个的话改完不重启就一直跑旧代码。
+AUTO_RELOAD = _bool("AUTO_RELOAD", True)
+# 多久检查一次代码有没有变（秒）
+AUTO_RELOAD_INTERVAL = _int("AUTO_RELOAD_INTERVAL", 10)
 
 # ---- 拟人化 ----
 # 打错字再撤回的概率
