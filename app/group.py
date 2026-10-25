@@ -611,7 +611,13 @@ async def handle(event: dict) -> None:
     st.timeline.append(
         {"user_id": self_id, "nick": "你", "text": " ".join(parts), "is_bot": True, "ts": time.time()}
     )
-    for tag in ([] if spoke else tags[:1]):
+    # 认亲这种场面不等模型想起标签，代码直接指定（主人除外，他叫是正常的）
+    forced = (
+        None
+        if persona.is_special(user_id)
+        else stickers.forced_tag(text, directed=directed)
+    )
+    for tag in ([forced] if forced else ([] if spoke else tags[:1])):
         path = stickers.path_for(tag)
         if path is None:
             continue

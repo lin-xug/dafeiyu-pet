@@ -16,6 +16,7 @@ import io
 import json
 import logging
 import random
+import re
 from pathlib import Path
 
 from . import config
@@ -109,6 +110,34 @@ def reload() -> None:
 
 def tag_names() -> list[str]:
     return list(tags().keys())
+
+
+# 「认亲」这张靠模型自觉太难触发——它得先想起这个标签存在。
+# 所以命中这些话就由代码直接指定，不看模型心情。
+# 前面加 (?<![我]) 是为了放过「我叫妈妈来接我」这种转述，只认冲她来的那句。
+_RECOGNIZE_RE = re.compile(
+    r"(?<![我])(叫|喊)\s*(一?声)?\s*(爹|爸爸?|妈妈?|父亲|母亲|爷爷|奶奶|祖宗)"  # 叫爸爸 / 喊一声妈
+    r"|(?<![我他她])(叫|喊)\s*我\s*(一?声)?\s*(爹|爸爸?|妈|妈妈|父亲|母亲)"  # 叫我爸爸
+    r"|我是你(爹|爸|妈)"  # 我是你爹
+    r"|认亲(?!节)|认个亲|攀亲戚"  # 认亲（放过「认亲节」）
+    r"|乖(女儿|闺女|孙女)"  # 乖女儿
+)
+
+
+def forced_tag(text: str, *, directed: bool = True) -> str | None:
+    """这个场面该配哪张图，由代码说了算。
+
+    目前只有一条规则：有人跟她认亲（叫爹叫妈、装亲戚），就用「认亲」那张。
+    `directed` 是「这话是不是冲她说的」——群里闲聊提到「叫妈妈」不该触发。
+    主人的认亲由调用方先排掉，不用这里判断。
+    """
+    if not text or not directed:
+        return None
+    if "认亲" not in tags():  # 没这张图就当没这功能
+        return None
+    if _RECOGNIZE_RE.search(text):
+        return "认亲"
+    return None
 
 
 def path_for(tag: str) -> Path | None:

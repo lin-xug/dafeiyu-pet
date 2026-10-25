@@ -492,7 +492,13 @@ async def handle_event(event: dict) -> None:
         if to_group:
             await onebot.send_private(user_id, f"发过去了，群 {to_group}")
 
-        for tag in [] if to_group else sticker_tags[:1]:
+        # 认亲这种场面不等模型想起标签，代码直接指定（转去群里时不配，主人除外）
+        forced = (
+            None
+            if (to_group or persona.is_special(user_id))
+            else stickers.forced_tag(text)
+        )
+        for tag in ([forced] if forced else ([] if to_group else sticker_tags[:1])):
             path = stickers.path_for(tag)
             if path is None:
                 log.warning("没有这个表情：%s（可用：%s）", tag, "、".join(stickers.tag_names()))

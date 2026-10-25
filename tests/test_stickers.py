@@ -72,5 +72,42 @@ class AnimatedTest(unittest.TestCase):
         self.assertIn("新标签", stickers.tags(), "加了图应该立刻能用，不该要重启")
 
 
+class ForcedTagTest(unittest.TestCase):
+    """「认亲」那张靠模型自觉太难触发，改成命中话术就由代码指定。"""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self._dir = stickers.STICKER_DIR
+        stickers.STICKER_DIR = self.tmp / "杂图"
+        stickers.STICKER_DIR.mkdir(parents=True)
+        (stickers.STICKER_DIR / "认亲.png").write_bytes(_png())
+        (stickers.STICKER_DIR / "tags.json").write_text('{"认亲": ["认亲.png"]}', "utf-8")
+        stickers.reload()
+
+    def tearDown(self):
+        stickers.STICKER_DIR = self._dir
+        stickers.reload()
+
+    def test_recognize_phrases(self):
+        for text in ("叫爸爸", "叫爹", "喊一声妈", "我是你爹", "认亲", "叫我爸爸",
+                     "乖女儿", "攀亲戚", "大肥鱼叫爹"):
+            self.assertEqual(stickers.forced_tag(text), "认亲", f"没认出：{text}")
+
+    def test_normal_talk_ignored(self):
+        for text in ("我叫妈妈来接我", "我妈今天做饭", "我爸爸是老师", "喊他名字",
+                     "今天认亲节吗", "我喊我妈过来", "他叫我妈妈", "你妈喊你吃饭", ""):
+            self.assertIsNone(stickers.forced_tag(text), f"误判：{text}")
+
+    def test_not_directed_ignored(self):
+        # 群里闲聊提到「叫爸爸」但没冲她说，不该触发
+        self.assertIsNone(stickers.forced_tag("叫爸爸", directed=False))
+
+    def test_missing_sticker_is_harmless(self):
+        (stickers.STICKER_DIR / "tags.json").write_text("{}", "utf-8")
+        (stickers.STICKER_DIR / "认亲.png").unlink()
+        stickers.reload()
+        self.assertIsNone(stickers.forced_tag("叫爸爸"), "没有这张图时不该炸，也不该指定")
+
+
 if __name__ == "__main__":
     unittest.main()
