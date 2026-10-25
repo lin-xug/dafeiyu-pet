@@ -171,6 +171,10 @@ def _sniff_ext(raw: bytes) -> str:
         return ".webp"
     if raw[:6] in (b"GIF87a", b"GIF89a"):
         return ".gif"
+    if raw[:2] == b"BM":
+        return ".bmp"
+    if raw[4:8] == b"ftyp":  # HEIC/AVIF 这类
+        return ".heic"
     return ""
 
 
@@ -195,6 +199,13 @@ def save_incoming(raw: bytes) -> Path | None:
     except Exception as exc:  # noqa: BLE001 - 动图、超大图、损坏文件都可能失败
         ext = _sniff_ext(raw)
         log.warning("表情转 PNG 失败（%s），按原格式存：%s", exc, ext or "认不出")
+        # 留一份原始字节，下次再翻车能直接查是什么格式/怎么坏的
+        try:
+            dump = config.DATA_DIR / "cache" / "failed-stickers"
+            dump.mkdir(parents=True, exist_ok=True)
+            (dump / f"{digest[:10]}{ext or '.bin'}").write_bytes(raw)
+        except OSError:
+            pass
         if not ext:
             return None
         fallback = STICKER_DIR / f"qq_{digest[:10]}{ext}"
