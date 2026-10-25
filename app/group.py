@@ -371,6 +371,9 @@ async def handle(event: dict) -> None:
     # 谁能切：主人、群主、管理员。普通群员说「闭嘴」不当真，交给模型按规则顶回去
     role = str(sender.get("role") or "")
     can_switch = persona.is_special(user_id) or role in ("owner", "admin")
+    if not can_switch and any(w in text for w in modes.SILENT_WORDS + modes.WAKE_WORDS):
+        # 有人想切但没权限：把 role 记下来，方便确认协议端有没有给这个字段
+        log.info("群 %s [%s] 想切模式但没权限（role=%r）", group_id, nick, role)
     reply = modes.handle_command(text, group_id, allowed=can_switch)
     if reply:
         # 关闭模式下，没资格的人连「当前模式」都别想听到回应
