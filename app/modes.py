@@ -118,6 +118,24 @@ QUERY_WORDS = ("当前模式", "模式")
 
 MODE_LABEL = {"silent": "关闭模式", "hyper": "超活跃模式", "normal": "普通模式"}
 
+# 有人在群里发「规则」就把这段发出去。写给不懂技术的人看，别用术语。
+RULE_WORDS = ("规则", "模式规则", "模式帮助")
+
+RULE_HELP = """群里怎么让我闭嘴、怎么让我说话：
+
+- 普通（默认）：该说就说，不该说就不说，平常就这样。
+- 闭嘴：一个字都不吭，@ 我也不回。但群里说的话我都记着，喊一声就回来。
+
+直接在这个群发这几个字就行：
+
+  闭嘴       我立刻安静（也可以说「安静点」「别说了」）
+  打开模式   恢复平常（也可以说「醒醒」「普通模式」）
+  规则       再看一遍这段
+
+谁能换：群主和管理员。普通群员说了不算，喊了我也当没听见。"""
+
+RULE_HELP_OWNER = "（另外你能开话痨模式：发「超活跃」，或者「超活跃 30 50」调细一点）"
+
 
 def _split_gid(raw: str) -> tuple[str, str | None]:
     """把「关闭模式 123456789」拆成（关闭模式, 123456789）。"""
@@ -127,21 +145,32 @@ def _split_gid(raw: str) -> tuple[str, str | None]:
     return raw.replace(" ", ""), None
 
 
-def handle_command(text: str, group_id: str | None, *, allowed: bool = False) -> str | None:
+def handle_command(
+    text: str,
+    group_id: str | None,
+    *,
+    allowed: bool = False,
+    owner: bool = False,
+) -> str | None:
     """在群里直接说命令就能切模式。返回要给用户看的话，None 表示不是命令。
 
     三种模式**同级**：关闭 / 普通 / 超活跃，互相都能直接切，不用先回普通模式。
     每个命令都支持带群号（私聊里远程操作某个群）。
 
-    `allowed` 是「这个人有没有资格切」——主人、群主、管理员才给 True。
-    没资格时返回 None，当成普通聊天交给模型：它知道该顶回去（规则里写了），
-    比代码替它说一句生硬的拒绝更像人。
-    查询模式不需要资格。
+    权限分两级：
+    - `allowed`：主人或群管理员，能切「闭嘴 / 普通」。
+    - `owner`：只有主人，能开「超活跃」。管理员说超活跃一律不理。
+    没资格时返回 None，当成普通聊天交给模型去顶回去——比代码生硬拒绝更像人。
+    查模式、看规则不需要资格。
     """
     raw = text.strip()
     word = raw.replace(" ", "")
     body, gid_suffix = _split_gid(raw)
     gid = gid_suffix or group_id
+
+    # ---- 「规则」：把用法发出去，谁问都给 ----
+    if word in RULE_WORDS:
+        return RULE_HELP + ("\n\n" + RULE_HELP_OWNER if owner else "")
 
     # ---- 开关类：关闭 / 打开（同级，写法完全对称）----
     for words, mode, msg in (
@@ -159,10 +188,10 @@ def handle_command(text: str, group_id: str | None, *, allowed: bool = False) ->
                 return f"{gid} 已切到{MODE_LABEL[mode]}"
             return msg
 
-    # ---- 超活跃：可以带随机率 / 提及率 ----
+    # ---- 超活跃：只有主人能开 ----
     match = ON_RE.match(raw.replace(" ", " ").strip()) or ON_RE.match(word)
     if match:
-        if not allowed:
+        if not owner:
             return None
         if not gid:
             return "这个得在群里说，或者带上群号：超活跃 123456789 10"
@@ -191,7 +220,7 @@ def handle_command(text: str, group_id: str | None, *, allowed: bool = False) ->
 
     # ---- 只写「超活跃」两个字 ----
     if word in ON_WORDS:
-        if not allowed:
+        if not owner:
             return None
         if not gid:
             return "这个得在群里说，或者带上群号：超活跃 123456789"

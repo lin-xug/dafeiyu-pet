@@ -1,7 +1,9 @@
 """表情包：动图不能变成静态图，加了图也不用重启。"""
 
 import io
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -69,6 +71,10 @@ class AnimatedTest(unittest.TestCase):
         (stickers.STICKER_DIR / "高兴.png").write_bytes(_png())
         self.assertIn("高兴", stickers.tags())
         (stickers.STICKER_DIR / "新标签.png").write_bytes(_png())
+        # 有的文件系统目录 mtime 精度不够，两次写在同一刻会看不出变化，
+        # 这里显式把目录时间推一下，测的是「变了就重建」这个逻辑本身
+        later = time.time() + 5
+        os.utime(stickers.STICKER_DIR, (later, later))
         self.assertIn("新标签", stickers.tags(), "加了图应该立刻能用，不该要重启")
 
 

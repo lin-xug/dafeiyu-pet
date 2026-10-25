@@ -40,8 +40,36 @@ class ModesTest(unittest.TestCase):
         modes.set_mode("unit-gid", "normal")
 
     def _cmd(self, text, gid):
-        """模拟有权限的人（主人 / 群主 / 管理员）下命令。"""
-        return modes.handle_command(text, gid, allowed=True)
+        """模拟主人下命令：闭嘴 / 普通 / 超活跃都能切。"""
+        return modes.handle_command(text, gid, allowed=True, owner=True)
+
+    def test_admin_can_silence_and_wake(self):
+        """群管理员能切闭嘴和普通。"""
+        self.assertIsNotNone(
+            modes.handle_command("闭嘴", "unit-gid", allowed=True, owner=False)
+        )
+        self.assertTrue(modes.is_silent("unit-gid"))
+        self.assertIsNotNone(
+            modes.handle_command("打开模式", "unit-gid", allowed=True, owner=False)
+        )
+        self.assertFalse(modes.is_silent("unit-gid"))
+
+    def test_admin_cannot_go_hyper(self):
+        """超活跃只有主人能开，管理员说了不算。"""
+        self.assertIsNone(
+            modes.handle_command("超活跃", "unit-gid", allowed=True, owner=False)
+        )
+        self.assertFalse(modes.is_hyper("unit-gid"))
+
+    def test_rule_help_anyone_can_ask(self):
+        text = modes.handle_command("规则", "unit-gid")
+        self.assertIn("闭嘴", text)
+        self.assertIn("谁能换", text)
+        self.assertNotIn("超活跃", text, "管理员用不了超活跃，说明里别写")
+
+    def test_rule_help_owner_sees_hyper(self):
+        text = modes.handle_command("规则", "unit-gid", owner=True)
+        self.assertIn("超活跃", text)
 
     def test_member_cannot_switch(self):
         """普通群员喊「闭嘴」不该生效，返回 None 交给模型按规则顶回去。"""

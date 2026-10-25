@@ -362,8 +362,8 @@ async def handle_event(event: dict) -> None:
     log.info("收到 %s：%s%s", user_id, text, f" [图 x{len(images)}]" if images else "")
 
     if persona.is_special(user_id):
-        # 私聊里只有主人能远程切群里的模式
-        mode_reply = modes.handle_command(text, None, allowed=True)
+        # 私聊里只有主人能远程切群，超活跃也只有主人能开
+        mode_reply = modes.handle_command(text, None, allowed=True, owner=True)
         if mode_reply:
             await onebot.send_private(user_id, mode_reply)
             return
