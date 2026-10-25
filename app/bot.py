@@ -18,6 +18,7 @@ from . import (
     facts,
     group,
     kbindex,
+    kinship,
     llm,
     memory,
     modes,
@@ -460,6 +461,11 @@ async def handle_event(event: dict) -> None:
     messages.extend(memory.recent(user_id))
     messages.append({"role": "user", "content": _build_user_content(text, image_raws)})
 
+    # 认亲：粗筛命中就并行判一下，跟主回复同时跑，不额外等
+    kin_task = None
+    if not persona.is_special(user_id) and kinship.hit(text):
+        kin_task = tasks.spawn(kinship.judge(text), name=f"kin:{user_id}")
+
     try:
         reply = await llm.chat(messages)
     except llm.LLMError as exc:
@@ -503,14 +509,23 @@ async def handle_event(event: dict) -> None:
         if to_group:
             await onebot.send_private(user_id, f"发过去了，群 {to_group}")
 
-        # 认亲：优先让模型自己判断（提示词里挂了依据），它没配图时代码兜底一张
+        # 认亲的三种来源，和群聊同一套优先级：
+        # 并行判断说是 → 一定配；模型自己写了 → 尊重；判断没跑成 → 强关键词兜底
         forced = (
             None
             if (to_group or persona.is_special(user_id))
             else stickers.forced_tag(text)
         )
         picked = [] if to_group else sticker_tags[:1]
-        if forced and not picked and not to_group:
+        kin_yes: bool | None = None
+        if kin_task is not None:
+            try:
+                kin_yes = await kin_task
+            except Exception:  # noqa: BLE001
+                kin_yes = None
+        if kin_yes is True and not to_group and "认亲" in stickers.tags():
+            picked = ["认亲"]
+        elif kin_yes is None and not picked and not to_group and forced:
             picked = [forced]
         for tag in picked:
             path = stickers.path_for(tag)

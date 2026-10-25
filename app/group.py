@@ -26,6 +26,7 @@ from . import (
     facts,
     gmemory,
     kbindex,
+    kinship,
     llm,
     modes,
     onebot,
@@ -529,6 +530,12 @@ async def handle(event: dict) -> None:
             return
 
     # 走到这里才花模型的钱
+    # 认亲：关键词粗筛命中就先起一个判断任务，跟后面的主回复并行跑。
+    # 判断只要 1 秒左右，主回复要 2~3 秒，这点时间被吃掉，等于零额外延迟。
+    kin_task = None
+    if not persona.is_special(user_id) and kinship.hit(text):
+        kin_task = tasks.spawn(kinship.judge(text), name=f"kin:{group_id}")
+
     extra = "\n".join(
         p
         for p in (
@@ -628,15 +635,25 @@ async def handle(event: dict) -> None:
     st.timeline.append(
         {"user_id": self_id, "nick": "你", "text": " ".join(parts), "is_bot": True, "ts": time.time()}
     )
-    # 认亲这种场面：优先让模型自己判断（提示词里已经挂了判断依据），
-    # 只有话说得很明确、它又完全没配图时，代码才补一张兜底。
+    # 认亲这张图的三种来源，优先级从高到低：
+    # 1. 并行判断明确说「是」→ 一定配这张；
+    # 2. 模型自己在回复里写了 [[表情:认亲]] → 尊重它；
+    # 3. 判断没跑成（超时/失败/开关关了）+ 强关键词命中 → 代码兜底一张。
     forced = (
         None
         if persona.is_special(user_id)
         else stickers.forced_tag(text, directed=directed)
     )
     picked = [] if spoke else tags[:1]
-    if forced and not picked:
+    kin_yes: bool | None = None
+    if kin_task is not None:
+        try:
+            kin_yes = await kin_task
+        except Exception:  # noqa: BLE001 - 判断出问题不该影响已经生成好的回复
+            kin_yes = None
+    if kin_yes is True and not spoke and "认亲" in stickers.tags():
+        picked = ["认亲"]
+    elif kin_yes is None and not picked and forced:
         picked = [forced]
     for tag in picked:
         path = stickers.path_for(tag)

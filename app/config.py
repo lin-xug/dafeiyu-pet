@@ -72,6 +72,13 @@ AUTO_RELOAD = _bool("AUTO_RELOAD", True)
 # 多久检查一次代码有没有变（秒）
 AUTO_RELOAD_INTERVAL = _int("AUTO_RELOAD_INTERVAL", 10)
 
+# ---- 认亲识别 ----
+# 群里出现「爸妈女儿」这类词时，额外调一次模型判断「是不是在跟她认亲」。
+# 关掉就是 0 成本、0 延迟，回到纯关键词判断。
+KINSHIP_JUDGE = _bool("KINSHIP_JUDGE", True)
+# 判断的超时（秒）。超时当「否」——宁可少发一张图，不能拖慢回复。
+KINSHIP_JUDGE_TIMEOUT = float(os.getenv("KINSHIP_JUDGE_TIMEOUT", "3"))
+
 # ---- 拟人化 ----
 # 打错字再撤回的概率
 TYPO_CHANCE = float(os.getenv("TYPO_CHANCE", "0.10"))
