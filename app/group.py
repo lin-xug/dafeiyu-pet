@@ -25,6 +25,7 @@ from . import (
     config,
     facts,
     gmemory,
+    kbindex,
     llm,
     modes,
     onebot,
@@ -521,6 +522,8 @@ async def handle(event: dict) -> None:
             persona.relation_hint(user_id),
             affinity.tone_block(aff),
             facts.block(user_id),
+            # 命中了知识库索引就临时挂一段判断依据（比如「有人在跟你认亲吗」）
+            kbindex.block(text),
             "" if brag_cmd else brag.group_block(group_id),  # 冷却没到就不出现
             brag.force_block("群里，当着大家的面") if brag_cmd else "",
         )
@@ -611,13 +614,17 @@ async def handle(event: dict) -> None:
     st.timeline.append(
         {"user_id": self_id, "nick": "你", "text": " ".join(parts), "is_bot": True, "ts": time.time()}
     )
-    # 认亲这种场面不等模型想起标签，代码直接指定（主人除外，他叫是正常的）
+    # 认亲这种场面：优先让模型自己判断（提示词里已经挂了判断依据），
+    # 只有话说得很明确、它又完全没配图时，代码才补一张兜底。
     forced = (
         None
         if persona.is_special(user_id)
         else stickers.forced_tag(text, directed=directed)
     )
-    for tag in ([forced] if forced else ([] if spoke else tags[:1])):
+    picked = [] if spoke else tags[:1]
+    if forced and not picked:
+        picked = [forced]
+    for tag in picked:
         path = stickers.path_for(tag)
         if path is None:
             continue

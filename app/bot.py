@@ -17,6 +17,7 @@ from . import (
     config,
     facts,
     group,
+    kbindex,
     llm,
     memory,
     modes,
@@ -419,7 +420,14 @@ async def handle_event(event: dict) -> None:
 
     # 时间感 + 长期摘要 + 这个人的特殊关系（只有本人能看到）
     summary = memory.load_summary(user_id)
-    extra_parts = [_time_hint(), persona.relation_hint(user_id), aff_line, facts.block(user_id, query=text)]
+    extra_parts = [
+        _time_hint(),
+        persona.relation_hint(user_id),
+        aff_line,
+        facts.block(user_id, query=text),
+        # 命中了知识库索引就临时挂一段判断依据（比如「对方是不是在跟你认亲」）
+        kbindex.block(text),
+    ]
     if summary:
         extra_parts.append("【你记得关于这个人的事】\n" + summary)
 
@@ -492,13 +500,16 @@ async def handle_event(event: dict) -> None:
         if to_group:
             await onebot.send_private(user_id, f"发过去了，群 {to_group}")
 
-        # 认亲这种场面不等模型想起标签，代码直接指定（转去群里时不配，主人除外）
+        # 认亲：优先让模型自己判断（提示词里挂了依据），它没配图时代码兜底一张
         forced = (
             None
             if (to_group or persona.is_special(user_id))
             else stickers.forced_tag(text)
         )
-        for tag in ([forced] if forced else ([] if to_group else sticker_tags[:1])):
+        picked = [] if to_group else sticker_tags[:1]
+        if forced and not picked and not to_group:
+            picked = [forced]
+        for tag in picked:
             path = stickers.path_for(tag)
             if path is None:
                 log.warning("没有这个表情：%s（可用：%s）", tag, "、".join(stickers.tag_names()))

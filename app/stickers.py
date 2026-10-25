@@ -130,6 +130,8 @@ def forced_tag(text: str, *, directed: bool = True) -> str | None:
     目前只有一条规则：有人跟她认亲（叫爹叫妈、装亲戚），就用「认亲」那张。
     `directed` 是「这话是不是冲她说的」——群里闲聊提到「叫妈妈」不该触发。
     主人的认亲由调用方先排掉，不用这里判断。
+
+    实测模型自己几乎不会想起这个标签，规则化之后才稳定。
     """
     if not text or not directed:
         return None

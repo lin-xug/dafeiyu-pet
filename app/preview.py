@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 
-from . import affinity, facts, group, llm, memory, modes, persona, stickers
+from . import affinity, facts, group, kbindex, llm, memory, modes, persona, stickers
 
 
 def _sticker_tags() -> list[str]:
@@ -24,6 +24,7 @@ async def preview_private(user_id: str, text: str, call_model: bool = True) -> d
             persona.relation_hint(user_id),
             affinity.tone_block(aff),
             facts.block(user_id, query=text),
+            kbindex.block(text),  # 跟真链路保持一致
             ("【你记得关于这个人的事】\n" + summary) if summary else "",
         )
         if part
@@ -94,6 +95,7 @@ async def preview_group(group_id: str, user_id: str, nick: str, text: str, call_
             persona.relation_hint(user_id) if persona.is_special(user_id) else "",
             affinity.tone_block(aff),
             facts.block(user_id, query=text),
+            kbindex.block(text),  # 跟真链路保持一致，调试台才看得到
         )
         if p
     )
