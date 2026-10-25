@@ -413,6 +413,7 @@ async def person_page(request: Request, qq: str, ok: str = ""):
             {
                 "gid": gid,
                 "nick": gmemory._read(gid, qq).get("nick", ""),
+                "nicks": gmemory.nicks(gid, qq),
                 "recent": gmemory.recent(gid, qq, 5),
                 "summary": gmemory.summary(gid, qq),
             }
@@ -509,6 +510,41 @@ async def history_action(qq: str, action: str = Form(...)):
     if action == "clear":
         memory.replace(qq, [])
     return RedirectResponse(f"/admin/people/{qq}?ok=history", status_code=303)
+
+
+@router.post("/people/{qq}/resummary")
+async def resummary(qq: str, gid: str = Form(...)):
+    """清掉旧的、重写这个群的印象。
+
+    昵称重名/冒认会让摘要把别人的事算到他头上（群里就有人把昵称改成「矮脚大王」）。
+    这里带上网名编号重新总结一遍，错了也能一键重来。
+    """
+    msgs = gmemory.recent(gid, qq, 40)
+    if not msgs:
+        return RedirectResponse(f"/admin/people/{qq}?ok=no-memory", status_code=303)
+    if config.MOCK_LLM:
+        return RedirectResponse(f"/admin/people/{qq}?ok=mock", status_code=303)
+    from . import llm
+
+    nick = aliases.nick_map().get(qq) or qq
+    prompt = group.PERSON_SUMMARY_PROMPT.format(
+        who=group._who(nick, qq),
+        old="（重写：忘掉以前的印象，只看下面这些）",
+        dialog="\n".join(f"- {m}" for m in msgs),
+    )
+    try:
+        text = await llm.chat(
+            [{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.3,
+            kind="summary",
+        )
+    except Exception:  # noqa: BLE001
+        return RedirectResponse(f"/admin/people/{qq}?ok=fail", status_code=303)
+    if text.strip():
+        gmemory.save_summary(gid, qq, text, gmemory._read(gid, qq).get("messages", []))
+        return RedirectResponse(f"/admin/people/{qq}?ok=resummary", status_code=303)
+    return RedirectResponse(f"/admin/people/{qq}?ok=fail", status_code=303)
 
 
 # ---------------- 记忆总览 ----------------

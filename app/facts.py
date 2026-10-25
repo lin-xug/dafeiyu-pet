@@ -17,12 +17,13 @@ _lock_note = "写文件用"
 LINE_RE = re.compile(r"^[-*]\s*\[(长期|临时)\]\s*(.+)$")
 
 EXTRACT_PROMPT = """\
-下面是某个人在聊天里说过的话。请只抽取"关于他自己的确定事实"。
+下面是「{who}」在聊天里说过的话，**只有他本人说的**。请只抽取"关于他自己的确定事实"。
 
 两类：
 - [长期] 职业、住处、宠物的名字、长期喜好、固定习惯、家人
 - [临时] 最近要做的事，比如出差、考试、搬家、约好的事
 
+不要把别人的事记到他头上：他替朋友、家人、群里其他人说的情况，不算他的。
 不要抽：情绪、观点、玩笑、对别人的评价、一次性的感叹。
 不要重复已有的。最多 5 条。没有就只输出 NONE。
 
@@ -165,8 +166,11 @@ def try_start(user_id: str) -> bool:
     return True
 
 
-async def extract(user_id: str, llm_chat, source: str = "") -> int:
-    """抽一遍，返回新增条数。llm_chat 传 llm.chat，避免循环导入。"""
+async def extract(user_id: str, llm_chat, source: str = "", who: str = "") -> int:
+    """抽一遍，返回新增条数。llm_chat 传 llm.chat，避免循环导入。
+
+    `who` 是给模型看的署名（昵称#编号），只用于提示词，不落盘。
+    """
     try:
         chunk = take_pending(user_id)
         if not chunk:
@@ -177,7 +181,9 @@ async def extract(user_id: str, llm_chat, source: str = "") -> int:
                 {
                     "role": "user",
                     "content": EXTRACT_PROMPT.format(
-                        existing=existing, utterances="\n".join(f"- {u}" for u in chunk)
+                        existing=existing,
+                        who=who or "这个人",
+                        utterances="\n".join(f"- {u}" for u in chunk),
                     ),
                 }
             ],

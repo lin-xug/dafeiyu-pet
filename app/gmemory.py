@@ -36,12 +36,13 @@ def _read(group_id: str, user_id: str) -> dict:
         return cached
     path = _path(group_id, user_id)
     if not path.exists():
-        return {"nick": "", "messages": [], "summary": "", "updated_at": 0}
+        return {"nick": "", "nicks": [], "messages": [], "summary": "", "updated_at": 0}
     try:
         data = json.loads(path.read_text("utf-8"))
     except (json.JSONDecodeError, OSError):
-        return {"nick": "", "messages": [], "summary": "", "updated_at": 0}
+        return {"nick": "", "nicks": [], "messages": [], "summary": "", "updated_at": 0}
     data.setdefault("nick", "")
+    data.setdefault("nicks", [])
     data.setdefault("messages", [])
     data.setdefault("summary", "")
     _cache[(group_id, user_id)] = data
@@ -78,11 +79,88 @@ def record(group_id: str, user_id: str, nick: str, text: str) -> None:
     if not text:
         return
     data = _read(group_id, user_id)
-    data["nick"] = nick or data.get("nick", "")
+    nick = (nick or "").strip()
+    if nick:
+        data["nick"] = nick
+        # 记住他用过的名字：改过名的人，模型只看到新名字会把旧消息当成别人说的
+        seen = data.get("nicks") or []
+        if nick not in seen:
+            seen.append(nick)
+            data["nicks"] = seen[-6:]
     data["messages"].append({"text": text[:200], "ts": time.time()})
     data["messages"] = data["messages"][-RAW_KEEP:]
     data["updated_at"] = time.time()
     _write(group_id, user_id, data)
+
+
+def nicks(group_id: str, user_id: str) -> list[str]:
+    """这个人在这个群用过的名字（按先后）。"""
+    return list(_read(group_id, user_id).get("nicks") or [])
+
+
+def rebuild_nicks() -> int:
+    """从群日志重建「每个人用过哪些昵称」。
+
+    老版本只存最后一个昵称，改过名的人历史就丢了，模型看到新旧两个名字会把
+    同一个人当成两个。重启时扫一次日志补上，补完落一个标记，之后不再扫。
+    只补 `nicks` 字段，不碰原话和摘要。
+    """
+    marker = config.GMEMORY_DIR / ".nicks_rebuilt"
+    if marker.exists():
+        return 0
+
+    seen: dict[tuple[str, str], list[str]] = {}
+    for path in config.GROUP_LOG_DIR.glob("*.jsonl"):
+        gid = path.stem
+        try:
+            with path.open(encoding="utf-8", errors="replace") as fh:
+                for line in fh:
+                    try:
+                        item = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if item.get("is_bot"):
+                        continue
+                    uid = str(item.get("user_id") or "")
+                    nick = (item.get("nick") or "").strip()
+                    if not uid or not nick:
+                        continue
+                    names = seen.setdefault((gid, uid), [])
+                    if nick not in names:
+                        names.append(nick)
+        except OSError:
+            continue
+
+    filled = 0
+    for (gid, uid), names in seen.items():
+        path = _path(gid, uid)
+        if not path.exists():  # 没攒过记忆的人不用建文件
+            continue
+        try:
+            data = json.loads(path.read_text("utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        old = list(data.get("nicks") or [])
+        merged = old + [n for n in names if n not in old]
+        if merged == old:
+            continue
+        data["nicks"] = merged[-6:]
+        data.setdefault("nick", merged[-1])
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), "utf-8")
+            tmp.replace(path)
+            filled += 1
+        except OSError:
+            continue
+
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text(str(time.time()), "utf-8")
+    except OSError:
+        pass
+    return filled
 
 
 def recent(group_id: str, user_id: str, limit: int = 10) -> list[str]:

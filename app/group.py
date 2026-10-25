@@ -262,19 +262,41 @@ def _group_memory_block(group_id: str, query: str = "") -> str:
 def _person_block(group_id: str, user_id: str, nick: str) -> str:
     """这个人在这个群说过的话 + 长期摘要。"""
     parts = []
+    who = _who(nick, user_id)
     lines = gmemory.recent(group_id, user_id, 10)
     if lines:
-        parts.append(f"【{nick} 最近在这个群说过】\n" + "\n".join(f"- {t}" for t in lines))
+        parts.append(f"【{who} 最近在这个群说过】\n" + "\n".join(f"- {t}" for t in lines))
     psum = gmemory.summary(group_id, user_id)
     if psum:
-        parts.append(f"【你对 {nick} 的了解】\n{psum}")
+        parts.append(f"【你对 {who} 的了解】\n{psum}")
+    # 改过名的人：把旧名字列出来，否则模型会把「阿泽」和「矮脚大王」当成两个人
+    others = [n for n in gmemory.nicks(group_id, user_id) if n and n != nick]
+    if others:
+        parts.append(
+            f"【{who} 在群里还用过的名字】{'、'.join(others[:5])}（同一个人，别当别人）"
+        )
     return "\n\n".join(parts)
+
+
+def _who(nick: str | None, user_id: str | None) -> str:
+    """给模型看的署名：昵称 + 固定后四位。
+
+    群昵称靠不住：实测 386 人的群里，有 1 个昵称被 2 个人共用、5 个人改过名
+    （连主人都从「矮脚大王」改成过「阿泽」）。只给昵称，模型必然把 A 说的话
+    记到 B 头上。后四位取自 QQ 号，改名不变、重名也能分开。
+    """
+    nick = (nick or "").strip()
+    uid = str(user_id or "")
+    tail = uid[-4:] if uid.isdigit() and len(uid) >= 4 else ""
+    if not nick:
+        return f"路人#{tail}" if tail else "有人"
+    return f"{nick}#{tail}" if tail else nick
 
 
 def _transcript(state: GroupState) -> str:
     lines = []
     for m in state.timeline:
-        who = "你" if m.get("is_bot") else (m.get("nick") or m.get("user_id"))
+        who = "你" if m.get("is_bot") else _who(m.get("nick"), m.get("user_id"))
         text = m.get("text") or ""
         if m.get("has_image") and not text:
             text = "（发了张图）"
@@ -417,7 +439,10 @@ async def handle(event: dict) -> None:
     if not bare_at:  # 「只@了你」是补的占位，不是他真说的话，别喂给事实库
         facts.record_utterance(user_id, text)
     if facts.needs_extract(user_id) and not config.MOCK_LLM and facts.try_start(user_id):
-        tasks.spawn(facts.extract(user_id, llm.chat, source=f"group:{group_id}"), name=f"fact:{user_id}")
+        tasks.spawn(
+            facts.extract(user_id, llm.chat, source=f"group:{group_id}", who=_who(nick, user_id)),
+            name=f"fact:{user_id}",
+        )
 
     # 攒够了就让模型整理一次群记忆（重启后从日志里补算，不会丢）
     if group_id not in _pending_count:
@@ -502,6 +527,15 @@ async def handle(event: dict) -> None:
         if p
     )
     system = persona.build_system_prompt(extra, sticker_tags=stickers.tag_names()) + "\n\n" + persona.group_rules()
+    # 这条是代码层硬加的，不受人格文件影响：群昵称会重名也会改，
+    # 不给模型一个稳定的对照规则，它就会把 A 说的话记到 B 头上。
+    system += (
+        "\n\n【怎么看群聊记录里的署名】\n"
+        "- 「名字#1234」里 # 后面是固定不变的编号：编号一样就是同一个人（哪怕他后来改了昵称），"
+        "编号不一样就是不同的人（哪怕昵称一模一样）。\n"
+        "- 说谁做了什么，一定要按编号对清楚，别把一个人的话记成另一个人的。\n"
+        "- 分不清是谁说的，就别提这个人。\n"
+    )
     kb_block = _knowledge_block(conf.get("kb"))
     if kb_block:
         system += "\n\n" + kb_block
@@ -628,6 +662,8 @@ PLAYBOOK_PROMPT = """\
 写法要求：
 - 你就是群里的一员，用"我"指自己，**不要写"AI""机器人""模型"**
 - 别人怎么逗你，要写成"他们爱逗我"，不要写成"用户在测试 AI"
+- 聊天记录里的「名字#1234」，# 后面是固定编号：编号不同就是不同的人
+  （哪怕昵称一样），编号一样就是同一个人（哪怕改过名）。别把两个人混成一个。
 - 例子：
   ADD 坑 群里爱叫我大肥鱼，一叫我就炸毛
   ADD 关系 张三总说自己是我哥，我从来不理
@@ -763,7 +799,7 @@ async def _curate_playbook(group_id: str) -> None:
             for i in data["items"][-40:]
         ) or "（空）"
         dialog = "\n".join(
-            f"{'你' if e.get('is_bot') else e.get('nick')}：{e.get('text') or '[图]'}"
+            f"{'你' if e.get('is_bot') else _who(e.get('nick'), e.get('user_id'))}：{e.get('text') or '[图]'}"
             for e in entries
         )
         raw = await llm.chat(
@@ -798,11 +834,12 @@ async def _curate_playbook(group_id: str) -> None:
 
 
 PERSON_SUMMARY_PROMPT = """\
-下面是「{nick}」在一个 QQ 群里的发言片段。总结一下：
+下面是「{who}」在一个 QQ 群里的发言片段，**只有他自己说的话**。总结一下：
 - 他是个什么样的人（说话风格、性格）
 - 他在意什么、常聊什么话题
 - 跟群里其他人的关系（看得出才写）
 
+只写他本人的事：不要把他提到的别人的经历、别人的喜好算到他头上。
 最多 5 条，每条一行，用 - 开头。不要客套，不要写"用户"这种词。
 和旧摘要重复的就合并。
 
@@ -825,7 +862,7 @@ async def _maybe_summarize_person(group_id: str, user_id: str, nick: str) -> Non
                 {
                     "role": "user",
                     "content": PERSON_SUMMARY_PROMPT.format(
-                        nick=nick,
+                        who=_who(nick, user_id),
                         old=gmemory.summary(group_id, user_id) or "（无）",
                         dialog=dialog,
                     ),

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from . import (
     affinity,
+    aliases,
     billing,
     brag,
     config,
@@ -391,7 +392,10 @@ async def handle_event(event: dict) -> None:
     # ---- 记一句，攒够就抽事实 ----
     facts.record_utterance(user_id, text)
     if facts.needs_extract(user_id) and not config.MOCK_LLM and facts.try_start(user_id):
-        tasks.spawn(facts.extract(user_id, llm.chat, source="private"), name=f"fact:{user_id}")
+        tasks.spawn(
+            facts.extract(user_id, llm.chat, source="private", who=aliases.get(user_id) or user_id),
+            name=f"fact:{user_id}",
+        )
 
     # ---- 好感度 ----
     aff = affinity.touch(user_id) if config.AFFINITY_ENABLED else affinity.Affinity(exp=150)

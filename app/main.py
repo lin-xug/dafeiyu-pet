@@ -47,6 +47,14 @@ async def _process(event: dict) -> None:
 @app.on_event("startup")
 async def _startup() -> None:
     persona.init()
+    # 老数据只存了最后一个昵称：从群日志补回「这个人用过哪些名字」，
+    # 否则改了名的人会被模型当成两个不同的人（同类问题：重名的人被当成一个）
+    try:
+        filled = gmemory.rebuild_nicks()
+        if filled:
+            log.info("从群日志补全了 %d 个人的昵称历史", filled)
+    except Exception:  # noqa: BLE001 - 迁移失败不该拦住启动
+        log.exception("补全昵称历史失败，跳过")
     # 定时把内存里的好感度/群个人记忆刷到磁盘
     tasks.spawn(affinity.flush_loop(), name="flush")
     tasks.spawn(gmemory_flush_loop(), name="gflush")

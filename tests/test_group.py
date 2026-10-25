@@ -13,8 +13,11 @@ class ScoreTest(unittest.TestCase):
 
     def test_name_ok_false(self):
         st = group.GroupState()
+        # random_chance 必须显式给 0：默认值有概率给「主动插话」加分，断言 0.0 会偶发失败
         self.assertEqual(
-            group.score_message(text="小鲸鱼", is_at=False, has_image=False, state=st, name_ok=False),
+            group.score_message(
+                text="小鲸鱼", is_at=False, has_image=False, state=st, name_ok=False, random_chance=0
+            ),
             0.0,
         )
 

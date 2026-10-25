@@ -12,7 +12,11 @@
 {% elif ok == 'summary' %}<div class="toast">✓ 私聊摘要已保存，下一句话就用新的</div>
 {% elif ok == 'facts' %}<div class="toast">✓ 事实库已更新</div>
 {% elif ok == 'memory' %}<div class="toast">✓ 群印象已保存</div>
-{% elif ok == 'history' %}<div class="toast">✓ 最近私聊已清空</div>{% endif %}
+{% elif ok == 'history' %}<div class="toast">✓ 最近私聊已清空</div>
+{% elif ok == 'resummary' %}<div class="toast">✓ 已按最近的发言重写这个群的印象</div>
+{% elif ok == 'no-memory' %}<div class="toast bad">✗ 他在这个群还没留下原话，没法重写</div>
+{% elif ok == 'fail' %}<div class="toast bad">✗ 重写失败，模型没给出内容（过会儿再试）</div>
+{% elif ok == 'mock' %}<div class="toast bad">✗ 现在是模拟模式（MOCK_LLM），不会真调模型</div>{% endif %}
 
 <form class="toolbar" method="post" action="/admin/people/{{ qq }}/alias">
   <input name="name" value="{{ alias }}" placeholder="备注：起个你一眼认得出的名字" maxlength="32" class="grow">
@@ -110,9 +114,16 @@
 {% for g in group_mem %}
 <div class="card mb">
   <div class="row" style="justify-content:space-between">
-    <div class="k">群 {{ g.gid }}{% if g.nick %} · {{ g.nick }}{% endif %}</div>
-    <span class="dim small">最近原话：{{ g.recent|join(' / ') or '无' }}</span>
+    <div class="k">群 {{ g.gid }}{% if g.nick %} · {{ g.nick }}{% endif %}
+      {% if g.nicks|length > 1 %}<span class="dim">（用过：{{ g.nicks|join('、') }}）</span>{% endif %}
+    </div>
+    <form method="post" action="/admin/people/{{ qq }}/resummary" style="margin:0"
+          onsubmit="return confirm('清掉这个群的旧印象，按他最近的发言重新总结一遍？会调一次模型。')">
+      <input type="hidden" name="gid" value="{{ g.gid }}">
+      <button class="mini">重写印象</button>
+    </form>
   </div>
+  <div class="dim small">最近原话：{{ g.recent|join(' / ') or '无' }}</div>
   <form method="post" action="/admin/people/{{ qq }}/group_summary">
     <input type="hidden" name="gid" value="{{ g.gid }}">
     <textarea name="text" style="margin-top:6px;min-height:80px">{{ g.summary }}</textarea>
