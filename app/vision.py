@@ -39,22 +39,43 @@ def to_data_uri(raw: bytes) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+async def _from_napcat(source: str) -> bytes | None:
+    """让协议端去取图（延迟导入，避免 onebot ↔ vision 循环依赖）。"""
+    from . import onebot
+
+    return await onebot.get_image_bytes(source)
+
+
 async def fetch_bytes(source: str) -> bytes | None:
-    """把 http(s)/file:///本地路径 都读成 bytes。"""
+    """把 http(s)/file:///本地路径/协议端 file 标识 都读成 bytes。"""
+    raw: bytes | None = None
     try:
         if source.startswith(("http://", "https://")):
             async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
                 resp = await client.get(source)
             if resp.status_code >= 400:
-                log.warning("下载图片失败 HTTP %s", resp.status_code)
-                return None
-            raw = resp.content
+                log.warning("下载图片失败 HTTP %s，改用协议端取", resp.status_code)
+            else:
+                raw = resp.content
+            if raw is None:
+                # 直链多半只对 QQ 客户端有效（一次性 rkey），让 NapCat 自己去取
+                raw = await _from_napcat(source)
         elif source.startswith("file://"):
-            raw = Path(source[7:]).read_bytes()
+            try:
+                raw = Path(source[7:]).read_bytes()
+            except OSError:
+                raw = await _from_napcat(source[7:])
         else:
-            raw = Path(source).read_bytes()
+            local = Path(source)
+            if local.is_file():
+                raw = local.read_bytes()
+            else:
+                # 事件里的 `XXXX.image` 这种标识，只能交给协议端
+                raw = await _from_napcat(source)
     except Exception as exc:  # noqa: BLE001
         log.warning("读取图片失败：%s", exc)
+        return None
+    if raw is None:
         return None
     if len(raw) > MAX_BYTES:
         log.warning("图片太大（%d 字节），跳过", len(raw))

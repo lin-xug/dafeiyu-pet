@@ -109,7 +109,8 @@ def extract(event: dict) -> tuple[str, list[str]]:
             if kind == "text":
                 texts.append(str(data.get("text") or ""))
             elif kind in ("image", "mface"):
-                src = data.get("url") or data.get("file") or ""
+                # 优先用协议端的 file 标识：QQ 直链带一次性 rkey，机器人直接下大概率 400
+                src = data.get("file") or data.get("url") or ""
                 if src:
                     images.append(str(src))
     return "".join(texts).strip(), images

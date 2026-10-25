@@ -167,6 +167,39 @@ async def send_group_record(group_id: str, path: Path) -> int | None:
     return _message_id(body)
 
 
+async def get_image_bytes(source: str) -> bytes | None:
+    """通过协议端把一张图取下来。
+
+    QQ 的图片直链带一次性 rkey，只对客户端有效，机器人这边直接 GET 大概率 400。
+    把事件里的 file 标识（`XXXX.image`）交给 NapCat，它会从本地缓存/服务端取回。
+    返回的文件可能是本地路径，也可能是 base64，两种都兼容。
+    """
+    for action in ("get_image", "get_file"):
+        body = await _call(action, {"file": source}, timeout=30)
+        if not body:
+            continue
+        data = body.get("data") or {}
+        if not isinstance(data, dict):
+            continue
+        path = data.get("file") or data.get("path")
+        if path:
+            try:
+                local = Path(str(path))
+                if local.is_file():
+                    return local.read_bytes()
+            except OSError:
+                pass
+        b64 = data.get("base64")
+        if b64:
+            import base64
+
+            try:
+                return base64.b64decode(str(b64))
+            except (ValueError, TypeError):
+                pass
+    return None
+
+
 async def recall(message_id: int) -> bool:
     """撤回自己发的消息（打错字用）。"""
     if config.DRY_RUN:
